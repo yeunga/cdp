@@ -1,5 +1,5 @@
 
-package ca.nrc.cadc.cred.client;
+package ca.nrc.cadc.cred;
 
 import java.io.IOException;
 import java.io.Writer;

@@ -1,6 +1,7 @@
 
 package ca.nrc.cadc.cred.client;
 
+import ca.nrc.cadc.cred.CertUtil;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -42,11 +43,12 @@ import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.SSLUtil;
 import ca.nrc.cadc.auth.X509CertificateChain;
 import ca.nrc.cadc.util.Base64;
+import java.util.ArrayList;
+import java.util.List;
 
 public class CredPublicClient
 {
-    private static Logger LOGGER = Logger
-            .getLogger(CredPublicClient.class);
+    private static Logger LOGGER = Logger.getLogger(CredPublicClient.class);
     private URL baseServiceURL;
 
     // socket factory to use when connecting
@@ -105,7 +107,8 @@ public class CredPublicClient
                 X509Certificate cert = generateV3Certificate(
                         readCSR(getEncodedCSR(location, userDN)
                                 .getBytes()), days * 24 * 60 * 60);
-                putSignedCert(location, cert, userDN);
+                X509Certificate[] chain = createProxyCertChain(cert);
+                putSignedCert(location, chain, userDN);
 
                 break;
             case HttpURLConnection.HTTP_OK:
@@ -493,10 +496,9 @@ public class CredPublicClient
     }
 
     /**
-     * Puts a signed certificate associated with a user/location
+     * Puts a signed certificate associated with a user/location.
      * 
-     * @param cert
-     *            Signed certificate to put.
+     * @param cert Signed certificate to put.
      * @throws IOException
      * @throws CertificateException
      */
@@ -505,35 +507,34 @@ public class CredPublicClient
             NoSuchAlgorithmException, SignatureException,
             CertificateException
     {
-        // find out whether the Subject is putting his own certificate
-        // or someone else (super user)
+        X500Principal delegatedUser = cert.getSubjectX500Principal();
+        String location = getLocation(delegatedUser);
+        putSignedCert(location, new X509Certificate[] { cert }, delegatedUser);
+    }
+    
+    // append certficate chain with the specified cert to make a valid proxy cert
+    private X509Certificate[] createProxyCertChain(X509Certificate cert)
+    {
         AccessControlContext ac = AccessController.getContext();
         Subject subject = Subject.getSubject(ac);
-        X509CertificateChain chain = null;
-        boolean own = false;
         if (subject != null)
         {
-            Set<X509CertificateChain> certs = subject
-                    .getPublicCredentials(X509CertificateChain.class);
-            if (certs.size() > 0)
+            Set<X509CertificateChain> cc = subject.getPublicCredentials(X509CertificateChain.class);
+            if (cc.size() > 0)
             {
-                chain = certs.iterator().next();
-                if (AuthenticationUtil.equals(chain.getPrincipal(), cert
-                        .getSubjectX500Principal()))
-                {
-                    own = true;
-                }
+               X509CertificateChain xcc = cc.iterator().next();
+               X509Certificate[] chain = xcc.getChain();
+               X509Certificate[] ret = new X509Certificate[chain.length + 1];
+               ret[0] = cert;
+               for (int i=0; i<chain.length; i++)
+               {
+                   ret[i+1] = chain[i];
+               }
+               return ret;
             }
         }
-        X500Principal delegatedUser = null;
-
-        if (own == false)
-        {
-            delegatedUser = cert.getSubjectX500Principal();
-        }
+        throw new IllegalStateException("current Subject does not contain a certficate chain");
         
-        String location = getLocation(delegatedUser);
-        putSignedCert(location, cert, delegatedUser);
     }
 
     /**
@@ -545,12 +546,15 @@ public class CredPublicClient
      *            Signed certificate to put.
      * @throws IOException
      */
-    private void putSignedCert(String location, X509Certificate cert,
-            X500Principal userDN) throws IOException,
+    private void putSignedCert(String location, X509Certificate[] certs,
+            X500Principal userDN) 
+            throws IOException,
             InvalidKeyException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
             CertificateEncodingException, CertificateParsingException
     {
+        LOGGER.debug("putSignedCert: " + userDN + " chain length: " + certs.length);
+        
         final StringBuilder resourcePath = new StringBuilder(64);
         // user does not have the group created. Through a POST.
         // the server generates one and returns it to the user
@@ -559,13 +563,11 @@ public class CredPublicClient
         if (userDN != null)
         {
             resourcePath.append("?DN=");
-            resourcePath.append(URLEncoder.encode(userDN.getName(),
-                    "UTF-8"));
+            resourcePath.append(URLEncoder.encode(userDN.getName(), "UTF-8"));
         }
 
         final URL resourceURL = new URL(resourcePath.toString());
-        LOGGER.debug("put certificate step in delegate(), URL="
-                + resourceURL);
+        LOGGER.debug("put certificate step in delegate(), URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
         connection.setRequestMethod("PUT");
         connection.setDoInput(true);
@@ -574,29 +576,9 @@ public class CredPublicClient
 
         OutputStream os = connection.getOutputStream();
         PEMWriter writer = new PEMWriter(new OutputStreamWriter(os));
-        writer.writeObject(cert);
-
-        if (userDN == null)
-	{
-            // subject generates proxy cetificate so include issuers cert chain
-            AccessControlContext ac = AccessController.getContext();
-            Subject subject = Subject.getSubject(ac);
-            X509CertificateChain chain = null;
-            if (subject != null)
-            {
-                Set<X509CertificateChain> certs = subject
-                       .getPublicCredentials(X509CertificateChain.class);
-                if (certs.size() > 0)
-                   chain = certs.iterator().next();
-            }
-            if (chain == null)
-            {
-                throw new AccessControlException("Subject not authorized");
-            }
-            for (X509Certificate x509Cert : chain.getChain())
-            {
-                writer.writeObject(x509Cert);
-            }
+        for (X509Certificate c : certs)
+        {
+            writer.writeObject(c);
         }
 
         writer.flush();
