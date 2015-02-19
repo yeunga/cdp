@@ -90,20 +90,30 @@
 
   <!-- JAR files to be included in classpath and war file -->
   <property name="lib.cadcUtil" value="${lib}/cadcUtil.jar" />
+  <property name="lib.cadcRegistryClient" value="${lib}/cadcRegistryClient.jar" />
   <property name="ext.log4j"       value="${ext.lib}/log4j.jar" />
+  <property name="ext.bouncy"       value="${ext.lib}/bcprov.jar" />
   <!-- end of project properties -->
 
   <!-- JAR files to be included in classpath for compilation -->
-  <property name="jars"
-            value="${lib.cadcUtil}:${ext.log4j}" />
+  <property name="jars" value="${lib.cadcUtil}:${lib.cadcRegistryClient}:${ext.log4j}:${ext.bouncy}" />
+  <property name="manifest.jars" value="${lib.cadcUtil} ${lib.cadcRegistryClient} ${ext.log4j} ${ext.bouncy}" />
   
-  <target name="build" depends="compile">
+
+  <target name="build" depends="compile,manifest">
       <jar jarfile="${build}/lib/${project}.jar"
                     basedir="${build}/class"
-                    update="no">
+                    update="no" manifest="${build}/tmp/${project}.mf">
       </jar>
+	  
   </target>
   
+  <target name="manifest">
+    <manifest file="${build}/tmp/${project}.mf" mode="replace">
+      <attribute name="Main-Class" value="ca.nrc.cadc.cred.client.Main"/>
+      <attribute name="Class-Path" value="${manifest.jars}" />
+    </manifest>
+  </target>
 	<target name="test">
 		<echo message="WARNING: no tests implemented" />
 	</target>
