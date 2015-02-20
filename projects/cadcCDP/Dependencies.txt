@@ -1,0 +1,10 @@
+JAR files required for the OpenCADC cadcUtil project
+====================================================
+
+Name in build.xml      Versioned Name          Project URL
+-----------------      --------------------    -----------
+log4j.jar              log4j-1.2.15            http://logging.apache.org
+bcprov.jar             bouncycastle-1.46-11    http://www.bouncycastle.org/
+cadcUtil.jar                                   http://code.google.com/p/opencadc                      
+cadcRegistryclient.jar                         http://code.google.com/p/opencadc
+

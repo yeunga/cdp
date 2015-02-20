@@ -1,0 +1,5 @@
+#!/bin/sh
+
+
+java -jar ${CADC_ROOT}/lib/cadcCDP.jar $@
+
