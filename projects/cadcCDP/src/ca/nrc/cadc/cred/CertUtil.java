@@ -43,16 +43,17 @@ import ca.nrc.cadc.auth.X509CertificateChain;
  */
 public class CertUtil
 {
+    
+    public static final String DEFAULT_SIGNATURE_ALGORITHM = "SHA256WITHRSA";
+    
+    public static final int DEFAULT_KEY_LENGTH = 1024;
 
     /**
      * Method that generates an X509 proxy certificate
      * 
-     * @param csr
-     *            CSR for the certificate
-     * @param lifetime
-     *            lifetime of the certificate in SECONDS
-     * @param chain
-     *            certificate used to sign the proxy certificate
+     * @param csr CSR for the certificate
+     * @param lifetime lifetime of the certificate in SECONDS
+     * @param chain certificate used to sign the proxy certificate
      * @return generated proxy certificate
      * @throws NoSuchAlgorithmException
      * @throws NoSuchProviderException
@@ -135,20 +136,20 @@ public class CertUtil
         }
 
         certGen.setPublicKey(csr.getPublicKey());
-        certGen.setSignatureAlgorithm(issuerCert.getSigAlgName());
+        // TODO: should be able to get signature algorithm from the csr, but... obtuse
+        certGen.setSignatureAlgorithm(DEFAULT_SIGNATURE_ALGORITHM);
 
         // extensions
         // add ProxyCertInfo extension to the new cert
 
-        certGen.addExtension(X509Extensions.KeyUsage, true, new KeyUsage(
-                KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
+        certGen.addExtension(X509Extensions.KeyUsage, true, 
+            new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
 
         certGen.addExtension(X509Extensions.AuthorityKeyIdentifier,
-                false, new AuthorityKeyIdentifierStructure(issuerCert));
+            false, new AuthorityKeyIdentifierStructure(issuerCert));
 
         certGen.addExtension(X509Extensions.SubjectKeyIdentifier,
-
-        false, new SubjectKeyIdentifierStructure(csr.getPublicKey("BC")));
+            false, new SubjectKeyIdentifierStructure(csr.getPublicKey("BC")));
 
         certGen.addExtension(X509Extensions.BasicConstraints, true,
                 new BasicConstraints(false));
