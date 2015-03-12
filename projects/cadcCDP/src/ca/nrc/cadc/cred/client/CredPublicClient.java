@@ -105,8 +105,8 @@ public class CredPublicClient
             case HttpURLConnection.HTTP_CREATED:
                 String location = connection.getHeaderField("Location");
                 X509Certificate cert = generateV3Certificate(
-                        readCSR(getEncodedCSR(location, userDN)
-                                .getBytes()), days * 24 * 60 * 60);
+                        readCSR(getEncodedCSR(location, userDN).getBytes()), 
+                            days * 24 * 60 * 60);
                 X509Certificate[] chain = createProxyCertChain(cert);
                 putSignedCert(location, chain, userDN);
 
