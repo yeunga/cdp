@@ -40,13 +40,11 @@ import java.security.cert.CertificateException;
 import org.apache.log4j.Logger;
 
 import ca.nrc.cadc.auth.X509CertificateChain;
-import ca.nrc.cadc.cred.AuthorizationException;
 
 /**
- * Class to access the private interface of CADC CDP. To instantiate
- * correctly it requires the
- * ca.nrc.cadc.cred.client.priv.impl.CredPrivateClientImpl concrete
- * subclass in the classpath.
+ * Class to access the private interface of CADC CDP.
+ * 
+ * @deprecated just use <code>new CredClient(serviceURI)</code>
  */
 public class CredPrivateClient
 {

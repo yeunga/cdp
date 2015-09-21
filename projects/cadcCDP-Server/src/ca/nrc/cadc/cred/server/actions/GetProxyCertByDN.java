@@ -23,7 +23,7 @@
  *                                      sation du logiciel.
  *
  *
- * @author adriand
+ * @author majorb
  * 
  * @version $Revision: $
  * 
@@ -32,14 +32,57 @@
  ************************************************************************
  */
 
+package ca.nrc.cadc.cred.server.actions;
 
+import java.util.Map;
 
-package ca.nrc.cadc.cred;
+import javax.security.auth.x500.X500Principal;
+
+import ca.nrc.cadc.auth.X509CertificateChain;
+import ca.nrc.cadc.cred.server.CertificateDAO;
+import ca.nrc.cadc.cred.server.ResourceNotFoundException;
+import ca.nrc.cadc.profiler.Profiler;
 
 /**
- * 
+ * Delegation action to get a signed certificate chain given the
+ * end-user's X500 distinguished name.
  */
-public class AuthorizationException extends Exception
+public class GetProxyCertByDN extends DelegationAction
 {
+    /**
+     * Constructor.
+     * 
+     * @param name
+     * @param daysValid
+     * @param trustedPrincipals
+     * @param dao
+     */
+    public GetProxyCertByDN(X500Principal name, Float daysValid,
+            Map<X500Principal, Float> trustedPrincipals, CertificateDAO dao)
+    {
+        super(name, daysValid, trustedPrincipals, dao);
+    }
+
+    
+
+    /**
+     * Perform the action by loading PEM String of Certificates and
+     * Private Key from DB.
+     * @param p
+     * @return 
+     * @throws ca.nrc.cadc.cred.server.ResourceNotFoundException 
+     */
+    @Override
+    public X509CertificateChain getCertificate(X500Principal p)
+        throws ResourceNotFoundException, 
+            Exception // plethora of certificate exceptions
+    {
+        Profiler profiler = new Profiler(this.getClass());
+        X509CertificateChain cert = certDAO.get(p);
+        profiler.checkpoint("getCertificate");
+        if (cert == null)
+            throw new ResourceNotFoundException();
+        return prepareCert(cert);
+    }
 
 }

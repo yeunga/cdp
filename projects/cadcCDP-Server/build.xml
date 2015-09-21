@@ -90,13 +90,14 @@
 
     <property name="cadcLog"             value="${lib}/cadcLog.jar" />
     <property name="cadcUtil"            value="${lib}/cadcUtil.jar" />
+    <property name="cadcCDP"             value="${lib}/cadcCDP.jar" />
     <property name="cadcVOSI"            value="${lib}/cadcVOSI.jar" />
     <property name="log4j"               value="${ext.lib}/log4j.jar" />
     <property name="servlet"             value="${ext.lib}/servlet-api.jar" />
     <property name="bouncy"              value="${ext.lib}/bcprov.jar" />
     <property name="spring"              value="${ext.lib}/spring.jar" />
 
-    <property name="jars" value="${log4j}:${servlet}:${bouncy}:${cadcLog}:${cadcUtil}:${cadcVOSI}:${spring}" />
+    <property name="jars" value="${log4j}:${servlet}:${bouncy}:${cadcLog}:${cadcUtil}:${cadcCDP}:${cadcVOSI}:${spring}" />
 
     <target name="build" depends="compile">
         <jar jarfile="${build}/lib/${project}.jar"
@@ -105,4 +106,17 @@
                 <include name="**/**.class" />
         </jar>
     </target>
+    
+    <target name="setup-test">
+        <copy overwrite="true" file="${env.CADC_PREFIX}/etc/proxy.pem" tofile="${build}/test/class/proxy.pem" />
+    </target>
+    
+    <property name="easyMock"       value="${ext.dev}/easymock.jar" />
+    <property name="junit"          value="${ext.dev}/junit.jar" />
+    <property name="cglib"          value="${ext.dev}/cglib.jar" />
+    <property name="objenesis"      value="${ext.dev}/objenesis.jar" />
+    <property name="asm"            value="${ext.dev}/asm.jar" />
+
+    <property name="testingJars"    value="${easyMock}:${junit}:${cglib}:${asm}:${objenesis}" />
+    
 </project>

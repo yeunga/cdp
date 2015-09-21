@@ -1,6 +1,77 @@
+/*
+************************************************************************
+*******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
+**************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
+*
+*  (c) 2011.                            (c) 2011.
+*  Government of Canada                 Gouvernement du Canada
+*  National Research Council            Conseil national de recherches
+*  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
+*  All rights reserved                  Tous droits réservés
+*
+*  NRC disclaims any warranties,        Le CNRC dénie toute garantie
+*  expressed, implied, or               énoncée, implicite ou légale,
+*  statutory, of any kind with          de quelque nature que ce
+*  respect to the software,             soit, concernant le logiciel,
+*  including without limitation         y compris sans restriction
+*  any warranty of merchantability      toute garantie de valeur
+*  or fitness for a particular          marchande ou de pertinence
+*  purpose. NRC shall not be            pour un usage particulier.
+*  liable in any event for any          Le CNRC ne pourra en aucun cas
+*  damages, whether direct or           être tenu responsable de tout
+*  indirect, special or general,        dommage, direct ou indirect,
+*  consequential or incidental,         particulier ou général,
+*  arising from the use of the          accessoire ou fortuit, résultant
+*  software.  Neither the name          de l'utilisation du logiciel. Ni
+*  of the National Research             le nom du Conseil National de
+*  Council of Canada nor the            Recherches du Canada ni les noms
+*  names of its contributors may        de ses  participants ne peuvent
+*  be used to endorse or promote        être utilisés pour approuver ou
+*  products derived from this           promouvoir les produits dérivés
+*  software without specific prior      de ce logiciel sans autorisation
+*  written permission.                  préalable et particulière
+*                                       par écrit.
+*
+*  This file is part of the             Ce fichier fait partie du projet
+*  OpenCADC project.                    OpenCADC.
+*
+*  OpenCADC is free software:           OpenCADC est un logiciel libre ;
+*  you can redistribute it and/or       vous pouvez le redistribuer ou le
+*  modify it under the terms of         modifier suivant les termes de
+*  the GNU Affero General Public        la “GNU Affero General Public
+*  License as published by the          License” telle que publiée
+*  Free Software Foundation,            par la Free Software Foundation
+*  either version 3 of the              : soit la version 3 de cette
+*  License, or (at your option)         licence, soit (à votre gré)
+*  any later version.                   toute version ultérieure.
+*
+*  OpenCADC is distributed in the       OpenCADC est distribué
+*  hope that it will be useful,         dans l’espoir qu’il vous
+*  but WITHOUT ANY WARRANTY;            sera utile, mais SANS AUCUNE
+*  without even the implied             GARANTIE : sans même la garantie
+*  warranty of MERCHANTABILITY          implicite de COMMERCIALISABILITÉ
+*  or FITNESS FOR A PARTICULAR          ni d’ADÉQUATION À UN OBJECTIF
+*  PURPOSE.  See the GNU Affero         PARTICULIER. Consultez la Licence
+*  General Public License for           Générale Publique GNU Affero
+*  more details.                        pour plus de détails.
+*
+*  You should have received             Vous devriez avoir reçu une
+*  a copy of the GNU Affero             copie de la Licence Générale
+*  General Public License along         Publique GNU Affero avec
+*  with OpenCADC.  If not, see          OpenCADC ; si ce n’est
+*  <http://www.gnu.org/licenses/>.      pas le cas, consultez :
+*                                       <http://www.gnu.org/licenses/>.
+*
+*  $Revision: 5 $
+*
+************************************************************************
+*/
 
 package ca.nrc.cadc.cred.client;
 
+import ca.nrc.cadc.auth.AuthMethod;
+import ca.nrc.cadc.auth.AuthenticationUtil;
+import ca.nrc.cadc.auth.HttpPrincipal;
 import ca.nrc.cadc.cred.CertUtil;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -39,33 +110,141 @@ import org.apache.log4j.Logger;
 import org.bouncycastle.jce.PKCS10CertificationRequest;
 import org.bouncycastle.openssl.PEMWriter;
 
-import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.SSLUtil;
 import ca.nrc.cadc.auth.X509CertificateChain;
+import ca.nrc.cadc.net.HttpDownload;
+import ca.nrc.cadc.profiler.Profiler;
+import ca.nrc.cadc.reg.client.RegistryClient;
 import ca.nrc.cadc.util.Base64;
-import java.util.ArrayList;
-import java.util.List;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.security.GeneralSecurityException;
+import java.security.Principal;
 
-public class CredPublicClient
+public class CredClient
 {
-    private static Logger LOGGER = Logger.getLogger(CredPublicClient.class);
-    private URL baseServiceURL;
+    private static Logger LOGGER = Logger.getLogger(CredClient.class);
+    
+    // these should be the full standardID of the feature; here we use a short form
+    // since CDP-1.0 doesn't specify any of these
+    private static final String DELEGATE = "delegate";
+    private static final String CERTS_DN = "certs-for-dn";
+    private static final String CERTS_USERID = "certs-for-userid";
+    
+    private URI delegationURI;
+    private URI x500CertsURI;
+    private URI userCertsURI;
+    private RegistryClient regClient;
+    
+    //private URL baseServiceURL;
 
     // socket factory to use when connecting
     SSLSocketFactory sf;
-
-    /**
-     * Default, and only available constructor.
-     * 
-     * @param baseServiceURL
-     *            The base service URL
-     */
-    public CredPublicClient(final URL baseServiceURL)
+    
+    public CredClient(URI serviceURI)
     {
-        this.baseServiceURL = baseServiceURL;
+        if (serviceURI == null)
+            throw new IllegalArgumentException("invalid serviceURI: " + serviceURI);
+        if (serviceURI.getFragment() != null)
+            throw new IllegalArgumentException("invalid serviceURI (fragment not allowed): " + serviceURI);
+        
+        this.regClient = new RegistryClient();
+        
+        try 
+        { 
+            this.delegationURI = new URI(serviceURI.toASCIIString() + "#" + DELEGATE); 
+            this.x500CertsURI = new URI(serviceURI.toASCIIString() + "#" + CERTS_DN); 
+            this.userCertsURI = new URI(serviceURI.toASCIIString() + "#" + CERTS_USERID);
+        } 
+        catch(URISyntaxException ex)
+        {
+            throw new RuntimeException("BUG: failed to create standardID from serviceURI + fragment", ex);
+        }
     }
 
-    public void delegate(X500Principal userDN, int days)
+    /**
+     * Get a proxy certificate for the specified user (subject);
+     * 
+     * @param subject the target user
+     * @param daysValid the length of time the proxy certificate should be valid for
+     * @return 
+     * @throws CertificateException 
+     * @throws java.io.IOException 
+     */
+    public X509CertificateChain getProxyCertificate(Subject subject, double daysValid)
+            throws AccessControlException, CertificateException, IOException
+    {
+        Set<Principal> principals = subject.getPrincipals();
+        // get the first available X500, HTTP Principal
+        X500Principal x500Principal = null;
+        HttpPrincipal httpPrincipal = null;
+        for (Principal principal : principals)
+        {
+            if (principal instanceof X500Principal
+                    && x500Principal == null)
+            {
+                x500Principal = (X500Principal) principal;
+            }
+            else if (principal instanceof HttpPrincipal
+                    && httpPrincipal == null)
+            {
+                httpPrincipal = (HttpPrincipal) principal;
+            }
+        }
+
+        StringBuilder path = new StringBuilder();
+        
+        // If an X500 Principal exists, get the certificate based on the
+        // DN. Otherwise, if an HTTP Principal exists, get the 
+        // certificate based on the userid.
+        
+        try
+        {
+            URI uri = x500CertsURI;
+            if (x500Principal != null)
+            {
+                String dn = AuthenticationUtil.canonizeDistinguishedName(x500Principal.getName());
+                path.append("/").append(dn);
+            }
+            else if (httpPrincipal != null)
+            {
+                path.append("/").append(httpPrincipal.getName());
+                uri = userCertsURI;
+            }
+            else
+                throw new UnsupportedOperationException("current subject lacks supported principal type");
+            
+            if (daysValid > 0)
+            {
+                path.append("/").append(String.valueOf(daysValid));
+            }
+        
+            URL url = regClient.getServiceURL(uri, "https", path.toString(), AuthMethod.CERT);
+            LOGGER.debug("getCertficate: " + url.toString());
+            return downloadCertificate(url);
+        }
+        finally { }
+    }
+
+    /**
+     * Delegate credentials to the service (IOVA CDP-1.0);
+     * 
+     * @param userDN
+     * @param days
+     * @throws MalformedURLException
+     * @throws IOException
+     * @throws InvalidKeyException
+     * @throws NoSuchProviderException
+     * @throws NoSuchAlgorithmException
+     * @throws SignatureException
+     * @throws CertificateEncodingException
+     * @throws CertificateParsingException
+     * @throws CertificateExpiredException
+     * @throws CertificateNotYetValidException 
+     */
+    public void delegate(X500Principal userDN, double days)
             throws MalformedURLException, IOException,
             InvalidKeyException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
@@ -82,8 +261,7 @@ public class CredPublicClient
                     "UTF-8"));
         }
 
-        final URL resourceURL = new URL(getBaseServiceURL()
-                + resourcePath.toString());
+        URL resourceURL = regClient.getServiceURL(delegationURI, "https", resourcePath.toString(), AuthMethod.CERT);
 
         LOGGER.debug("delegate(), URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
@@ -104,9 +282,9 @@ public class CredPublicClient
         {
             case HttpURLConnection.HTTP_CREATED:
                 String location = connection.getHeaderField("Location");
+                int sec = (int) days * 24 * 60 * 60; // seconds
                 X509Certificate cert = generateV3Certificate(
-                        readCSR(getEncodedCSR(location, userDN).getBytes()), 
-                            days * 24 * 60 * 60);
+                        readCSR(getEncodedCSR(location, userDN).getBytes()), sec);
                 X509Certificate[] chain = createProxyCertChain(cert);
                 putSignedCert(location, chain, userDN);
 
@@ -150,8 +328,7 @@ public class CredPublicClient
                     "UTF-8"));
         }
 
-        final URL resourceURL = new URL(getBaseServiceURL()
-                + resourcePath.toString());
+        URL resourceURL = regClient.getServiceURL(delegationURI, "https", resourcePath.toString(), AuthMethod.CERT);
 
         LOGGER.debug("delegate(), URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
@@ -442,8 +619,8 @@ public class CredPublicClient
                     "UTF-8"));
         }
 
-        final URL resourceURL = new URL(getBaseServiceURL()
-                + resourcePath.toString());
+        URL resourceURL = regClient.getServiceURL(delegationURI, "https", resourcePath.toString(), AuthMethod.CERT);
+        
         LOGGER.debug("get hash, URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
         connection.setRequestMethod("GET");
@@ -471,7 +648,11 @@ public class CredPublicClient
                         throw new CertificateException(
                                 "Only one hash expected");
                     }
-                    return baseServiceURL + "/" + hash;
+                    String hashPath = "/" + hash;
+                    URL u = regClient.getServiceURL(delegationURI, "https", hashPath, AuthMethod.CERT);
+                    if (u == null)
+                        throw new RuntimeException("BUG: failed to lookup/create URL to hash");
+                    return u.toExternalForm();
                 }
                 catch (UnsupportedEncodingException e)
                 {
@@ -617,15 +798,6 @@ public class CredPublicClient
     }
 
     /**
-     * 
-     * @return the base service URL
-     */
-    public URL getBaseServiceURL()
-    {
-        return baseServiceURL;
-    }
-
-    /**
      * Open a HttpsURLConnection with a SocketFactory created based on
      * user credentials.
      * 
@@ -731,5 +903,67 @@ public class CredPublicClient
         LOGGER.debug("RSA private key: " + ret.length + " bytes");
 
         return ret;
+    }
+    
+    /**
+     * Accesses the Certificate from the specified location.
+     * 
+     * @param location
+     *            URL of the resource for obtaining the certificate.
+     * @throws IOException
+     */
+    private X509CertificateChain downloadCertificate(URL location)
+        throws AccessControlException, IOException
+    {
+        LOGGER.debug("opening connection to " + location);
+        Profiler profiler = new Profiler(this.getClass());
+        
+        byte[] certificate = null;
+        try
+        {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            HttpDownload get = new HttpDownload(location, bos);
+            
+            get.run();
+            if ( get.getThrowable() != null)
+            {
+                if (get.getThrowable() instanceof IOException)
+                    throw (IOException) get.getThrowable();
+                
+                if (get.getThrowable() instanceof AccessControlException)
+                    throw (AccessControlException) get.getThrowable();
+                
+                if (get.getThrowable() instanceof FileNotFoundException)
+                    return null;
+                
+                throw new RuntimeException("unexpected failure download certificate", get.getThrowable());
+            }
+            
+            certificate = bos.toByteArray();
+            LOGGER.debug("Downloaded Certificate of size: " + certificate.length);
+        }
+        finally
+        {
+            profiler.checkpoint("downloadCertificate");
+        }
+
+        if (certificate.length > 0)
+        {
+            try
+            {
+                return SSLUtil.readPemCertificateAndKey(certificate);
+            }
+            catch (GeneralSecurityException e)
+            {
+                LOGGER.warn(e);
+                throw new IllegalStateException("Could not parse the certificate", e);
+            }
+            finally
+            {
+                profiler.checkpoint("parseCertificate");
+            }
+        }
+        
+        throw new IllegalStateException("No content in certificate.");
     }
 }
