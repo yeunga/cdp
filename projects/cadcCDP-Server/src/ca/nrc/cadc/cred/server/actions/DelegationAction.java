@@ -148,18 +148,16 @@ public abstract class DelegationAction implements
                     "Delegation failed because caller autheticated with multiple certificates.");
         }
 
-        
-        
-        
+        if (this.daysValid == null)
+            this.daysValid = 30.0f; // was default in ProxyCertServlet
+            
         // check if it's a trusted client
         boolean authorized = false;
         X500Principal caller = principals.iterator().next();
         if (name == null || AuthenticationUtil.equals(name, caller))
         {
             authorized = true;
-            if (this.daysValid == null)
-                this.daysValid = 30.0f; // was default in ProxyCertServlet
-            else if (daysValid > 30.0)
+            if (daysValid > 30.0)
                 throw new ResourceNotFoundException("Requested lifetime limitted to 30");
         }
         else
