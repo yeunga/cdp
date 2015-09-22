@@ -134,6 +134,7 @@ public class CertificateDAO
         {
             try
             {
+                logger.debug("lookup datasource: " + dataSourceName);
                 return DBUtil.getDataSource(dataSourceName);
             }
             catch(NamingException ex)

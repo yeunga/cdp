@@ -131,8 +131,7 @@ public class ProxyServlet extends HttpServlet
                             "Cannot parse trusted principal from servlet config: "
                                     + principalStr);
                 }
-                LOGGER.debug("Adding trusted principal: " + principal
-                        + " , max days valid: " + maxDaysValid);
+                LOGGER.info("trusted: " + principal + " , max days valid: " + maxDaysValid);
                 trustedPrincipals.put(new X500Principal(principal), maxDaysValid);
             }
         }
@@ -141,7 +140,7 @@ public class ProxyServlet extends HttpServlet
         this.database = config.getInitParameter(CATALOG);
         this.schema = config.getInitParameter(SCHEMA);
         
-        LOGGER.debug("Init complete.");
+        LOGGER.info("persistence: " + dataSourceName + " " + database + " " + schema);
     }
 
     /**

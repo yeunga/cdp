@@ -218,7 +218,7 @@ public class CredClient
             
             if (daysValid > 0)
             {
-                path.append("/").append(String.valueOf(daysValid));
+                path.append("?daysValid=").append(String.valueOf(daysValid));
             }
         
             URL url = regClient.getServiceURL(uri, "https", path.toString(), AuthMethod.CERT);
