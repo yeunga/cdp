@@ -113,10 +113,10 @@ import org.bouncycastle.openssl.PEMWriter;
 import ca.nrc.cadc.auth.SSLUtil;
 import ca.nrc.cadc.auth.X509CertificateChain;
 import ca.nrc.cadc.net.HttpDownload;
+import ca.nrc.cadc.net.NetUtil;
 import ca.nrc.cadc.profiler.Profiler;
 import ca.nrc.cadc.reg.client.RegistryClient;
 import ca.nrc.cadc.util.Base64;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -130,16 +130,12 @@ public class CredClient
     // these should be the full standardID of the feature; here we use a short form
     // since CDP-1.0 doesn't specify any of these
     private static final String DELEGATE = "delegate";
-    private static final String CERTS_DN = "certs-for-dn";
-    private static final String CERTS_USERID = "certs-for-userid";
+    private static final String PROXY_CERTS = "proxy";
     
     private URI delegationURI;
-    private URI x500CertsURI;
-    private URI userCertsURI;
+    private URI proxyURI;
     private RegistryClient regClient;
     
-    //private URL baseServiceURL;
-
     // socket factory to use when connecting
     SSLSocketFactory sf;
     
@@ -155,8 +151,7 @@ public class CredClient
         try 
         { 
             this.delegationURI = new URI(serviceURI.toASCIIString() + "#" + DELEGATE); 
-            this.x500CertsURI = new URI(serviceURI.toASCIIString() + "#" + CERTS_DN); 
-            this.userCertsURI = new URI(serviceURI.toASCIIString() + "#" + CERTS_USERID);
+            this.proxyURI = new URI(serviceURI.toASCIIString() + "#" + PROXY_CERTS); 
         } 
         catch(URISyntaxException ex)
         {
@@ -174,7 +169,7 @@ public class CredClient
      * @throws java.io.IOException 
      */
     public X509CertificateChain getProxyCertificate(Subject subject, double daysValid)
-            throws AccessControlException, CertificateException, IOException
+            throws AccessControlException, CertificateException,  IOException
     {
         Set<Principal> principals = subject.getPrincipals();
         // get the first available X500, HTTP Principal
@@ -202,16 +197,14 @@ public class CredClient
         
         try
         {
-            URI uri = x500CertsURI;
             if (x500Principal != null)
             {
                 String dn = AuthenticationUtil.canonizeDistinguishedName(x500Principal.getName());
-                path.append("/").append(dn);
+                path.append("/dn/").append(NetUtil.encode(dn));
             }
             else if (httpPrincipal != null)
             {
-                path.append("/").append(httpPrincipal.getName());
-                uri = userCertsURI;
+                path.append("/userid/").append(httpPrincipal.getName());
             }
             else
                 throw new UnsupportedOperationException("current subject lacks supported principal type");
@@ -221,7 +214,7 @@ public class CredClient
                 path.append("?daysValid=").append(String.valueOf(daysValid));
             }
         
-            URL url = regClient.getServiceURL(uri, "https", path.toString(), AuthMethod.CERT);
+            URL url = regClient.getServiceURL(proxyURI, "https", path.toString(), AuthMethod.CERT);
             LOGGER.debug("getCertficate: " + url.toString());
             return downloadCertificate(url);
         }
