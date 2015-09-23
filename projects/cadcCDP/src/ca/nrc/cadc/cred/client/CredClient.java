@@ -114,6 +114,7 @@ import ca.nrc.cadc.auth.SSLUtil;
 import ca.nrc.cadc.auth.X509CertificateChain;
 import ca.nrc.cadc.net.HttpDownload;
 import ca.nrc.cadc.net.NetUtil;
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.profiler.Profiler;
 import ca.nrc.cadc.reg.client.RegistryClient;
 import ca.nrc.cadc.util.Base64;
@@ -167,9 +168,10 @@ public class CredClient
      * @return 
      * @throws CertificateException 
      * @throws java.io.IOException 
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException 
      */
     public X509CertificateChain getProxyCertificate(Subject subject, double daysValid)
-            throws AccessControlException, CertificateException,  IOException
+            throws AccessControlException, CertificateException,  IOException, ResourceNotFoundException
     {
         Set<Principal> principals = subject.getPrincipals();
         // get the first available X500, HTTP Principal
@@ -236,13 +238,14 @@ public class CredClient
      * @throws CertificateParsingException
      * @throws CertificateExpiredException
      * @throws CertificateNotYetValidException 
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException 
      */
     public void delegate(X500Principal userDN, double days)
             throws MalformedURLException, IOException,
             InvalidKeyException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
             CertificateEncodingException, CertificateParsingException,
-            CertificateExpiredException, CertificateNotYetValidException
+            CertificateExpiredException, CertificateNotYetValidException, ResourceNotFoundException
     {
         final StringBuilder resourcePath = new StringBuilder(64);
         // user does not have the group created. Through a POST.
@@ -288,7 +291,7 @@ public class CredClient
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
                 // parent node not found
-                // break intentionally left out
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -308,8 +311,9 @@ public class CredClient
      * @param userDN
      * @return URL to the newly create resource
      * @throws IOException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
-    public String createResoure(X500Principal userDN) throws IOException
+    public String createResoure(X500Principal userDN) throws IOException, ResourceNotFoundException
     {
         final StringBuilder resourcePath = new StringBuilder(64);
         // user does not have the group created. Through a POST.
@@ -348,7 +352,7 @@ public class CredClient
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
                 // parent node not found
-                // break intentionally left out
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -368,9 +372,10 @@ public class CredClient
      * @param userDN
      * @throws IOException
      * @throws CertificateException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
     public void deleteResource(X500Principal userDN) throws IOException,
-            CertificateException
+            CertificateException, ResourceNotFoundException
     {
         String location = getLocation(userDN);
         final StringBuilder resourcePath = new StringBuilder(64);
@@ -407,9 +412,9 @@ public class CredClient
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
                 // parent node not found
-                // break intentionally left out
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
-                // duplicate group
+                // duplicate
                 throw new IllegalArgumentException(responseMessage);
             case HttpURLConnection.HTTP_FORBIDDEN:
                 throw new AccessControlException(responseMessage);
@@ -435,7 +440,7 @@ public class CredClient
             NoSuchProviderException, NoSuchAlgorithmException,
             SignatureException, CertificateEncodingException,
             CertificateParsingException, CertificateExpiredException,
-            CertificateNotYetValidException
+            CertificateNotYetValidException, ResourceNotFoundException
     {
         final URL resourceURL = new URL(location + "/CSR");
         LOGGER.debug("get CSR step in delegate(), URL=" + resourceURL);
@@ -482,7 +487,7 @@ public class CredClient
             case HttpURLConnection.HTTP_CONFLICT:
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
-                return null;
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -502,6 +507,15 @@ public class CredClient
      *            The DN of the user that owns the CSR.
      * @return CSR
      * @throws IOException
+     * @throws java.security.InvalidKeyException
+     * @throws java.security.cert.CertificateEncodingException
+     * @throws java.security.cert.CertificateParsingException
+     * @throws java.security.cert.CertificateExpiredException
+     * @throws java.security.cert.CertificateNotYetValidException
+     * @throws java.security.NoSuchProviderException
+     * @throws java.security.NoSuchAlgorithmException
+     * @throws java.security.SignatureException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      * 
      */
     public String getEncodedCSR(X500Principal userDN) throws IOException,
@@ -509,7 +523,7 @@ public class CredClient
             CertificateParsingException, CertificateExpiredException,
             CertificateNotYetValidException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
-            CertificateException
+            CertificateException, ResourceNotFoundException
     {
         String location = getLocation(userDN);
         if (location == null)
@@ -523,15 +537,23 @@ public class CredClient
     /**
      * Accesses the certificate associated with a user/location
      * 
+     * @param userDN
      * @return X509Certificate from the CDP URL of the resource that owns
      *         the certificate
      * @throws IOException
+     * @throws java.security.InvalidKeyException
+     * @throws java.security.NoSuchProviderException
+     * @throws java.security.NoSuchAlgorithmException
+     * @throws java.security.SignatureException
+     * @throws java.security.cert.CertificateEncodingException
+     * @throws java.security.cert.CertificateParsingException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
     public X509Certificate[] getCertificate(X500Principal userDN)
             throws IOException, InvalidKeyException,
             NoSuchProviderException, NoSuchAlgorithmException,
             SignatureException, CertificateEncodingException,
-            CertificateParsingException, CertificateException
+            CertificateParsingException, CertificateException, ResourceNotFoundException
     {
         String location = getLocation(userDN);
         final URL resourceURL = new URL(location + "/certificate");
@@ -580,7 +602,7 @@ public class CredClient
             case HttpURLConnection.HTTP_CONFLICT:
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
-                return null;
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -596,11 +618,14 @@ public class CredClient
     /**
      * Gets the URL corresponding to the resource in CDP
      * 
+     * @param userDN
      * @return hash code used to access subject's resource in CDP
      * @throws IOException
+     * @throws java.security.cert.CertificateException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
     public String getLocation(X500Principal userDN) throws IOException,
-            CertificateException
+            CertificateException, ResourceNotFoundException
     {
         final StringBuilder resourcePath = new StringBuilder(64);
         // user does not have the group created. Through a POST.
@@ -656,7 +681,7 @@ public class CredClient
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
                 // parent node not found
-                // break intentionally left out
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -674,12 +699,17 @@ public class CredClient
      * 
      * @param cert Signed certificate to put.
      * @throws IOException
+     * @throws java.security.InvalidKeyException
+     * @throws java.security.NoSuchProviderException
+     * @throws java.security.NoSuchAlgorithmException
+     * @throws java.security.SignatureException
      * @throws CertificateException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
     public void putSignedCert(X509Certificate cert) throws IOException,
             InvalidKeyException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
-            CertificateException
+            CertificateException, ResourceNotFoundException
     {
         X500Principal delegatedUser = cert.getSubjectX500Principal();
         String location = getLocation(delegatedUser);
@@ -725,7 +755,7 @@ public class CredClient
             throws IOException,
             InvalidKeyException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
-            CertificateEncodingException, CertificateParsingException
+            CertificateEncodingException, CertificateParsingException, ResourceNotFoundException
     {
         LOGGER.debug("putSignedCert: " + userDN + " chain length: " + certs.length);
         
@@ -777,7 +807,7 @@ public class CredClient
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
                 // parent node not found
-                // break intentionally left out
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -906,9 +936,8 @@ public class CredClient
      * @throws IOException
      */
     private X509CertificateChain downloadCertificate(URL location)
-        throws AccessControlException, IOException
+        throws AccessControlException, IOException, ResourceNotFoundException
     {
-        LOGGER.debug("opening connection to " + location);
         Profiler profiler = new Profiler(this.getClass());
         
         byte[] certificate = null;
@@ -927,7 +956,7 @@ public class CredClient
                     throw (AccessControlException) get.getThrowable();
                 
                 if (get.getThrowable() instanceof FileNotFoundException)
-                    return null;
+                    throw new ResourceNotFoundException(get.getThrowable().getMessage(), get.getThrowable());
                 
                 throw new RuntimeException("unexpected failure download certificate", get.getThrowable());
             }
@@ -940,7 +969,7 @@ public class CredClient
             profiler.checkpoint("downloadCertificate");
         }
 
-        if (certificate.length > 0)
+        if (certificate != null && certificate.length > 0)
         {
             try
             {
@@ -957,6 +986,6 @@ public class CredClient
             }
         }
         
-        throw new IllegalStateException("No content in certificate.");
+        throw new RuntimeException("No content in certificate");
     }
 }

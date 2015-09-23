@@ -1,7 +1,7 @@
 package ca.nrc.cadc.cred.server.actions;
 
 import ca.nrc.cadc.auth.AuthenticationUtil;
-import ca.nrc.cadc.cred.server.ResourceNotFoundException;
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import static org.easymock.EasyMock.createMock;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;

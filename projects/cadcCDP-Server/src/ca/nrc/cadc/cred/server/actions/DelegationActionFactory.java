@@ -45,7 +45,7 @@ import javax.servlet.http.HttpServletRequest;
 
 import ca.nrc.cadc.auth.X509CertificateChain;
 import ca.nrc.cadc.cred.server.CertificateDAO;
-import ca.nrc.cadc.cred.server.ResourceNotFoundException;
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.profiler.Profiler;
 import java.security.Principal;
 import java.util.HashSet;
@@ -219,7 +219,7 @@ public class DelegationActionFactory
         public X509CertificateChain getCertificate(X500Principal name)
                 throws Exception
         {
-            throw new ResourceNotFoundException();
+            throw new ResourceNotFoundException("not found: " + name.getName());
         }
 
     }

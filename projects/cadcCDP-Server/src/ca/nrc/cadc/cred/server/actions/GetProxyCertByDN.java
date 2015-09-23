@@ -40,7 +40,7 @@ import javax.security.auth.x500.X500Principal;
 
 import ca.nrc.cadc.auth.X509CertificateChain;
 import ca.nrc.cadc.cred.server.CertificateDAO;
-import ca.nrc.cadc.cred.server.ResourceNotFoundException;
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.profiler.Profiler;
 
 /**
@@ -81,7 +81,7 @@ public class GetProxyCertByDN extends DelegationAction
         X509CertificateChain cert = certDAO.get(p);
         profiler.checkpoint("getCertificate");
         if (cert == null)
-            throw new ResourceNotFoundException();
+            throw new ResourceNotFoundException("not found: " + p.getName());
         return prepareCert(cert);
     }
 

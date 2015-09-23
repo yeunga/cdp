@@ -64,6 +64,7 @@ import ca.nrc.cadc.cred.server.actions.DelegationActionFactory;
 import ca.nrc.cadc.io.ByteCountWriter;
 import ca.nrc.cadc.log.ServletLogInfo;
 import ca.nrc.cadc.log.WebServiceLogInfo;
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import java.io.PrintWriter;
 
 /**

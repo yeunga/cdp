@@ -63,9 +63,9 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.X509CertificateChain;
-import ca.nrc.cadc.cred.server.ResourceNotFoundException;
 import ca.nrc.cadc.cred.CertUtil;
 import ca.nrc.cadc.cred.server.CertificateDAO;
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.profiler.Profiler;
 import java.util.Iterator;
 import org.apache.log4j.Logger;
