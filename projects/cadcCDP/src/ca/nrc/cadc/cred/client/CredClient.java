@@ -161,7 +161,9 @@ public class CredClient
     }
 
     /**
-     * Get a proxy certificate for the specified user (subject);
+     * Get a proxy certificate for the specified user (subject). This operation is
+     * currently a custom feature of the cadcCDP-Server implementation that allows
+     * authorized callers to generate short-lived proxy certificates.
      * 
      * @param subject the target user
      * @param daysValid the length of time the proxy certificate should be valid for
@@ -224,7 +226,7 @@ public class CredClient
     }
 
     /**
-     * Delegate credentials to the service (IOVA CDP-1.0);
+     * Delegate credentials to the service (IVOA CDP-1.0).
      * 
      * @param userDN
      * @param days
@@ -279,24 +281,25 @@ public class CredClient
             case HttpURLConnection.HTTP_CREATED:
                 String location = connection.getHeaderField("Location");
                 int sec = (int) days * 24 * 60 * 60; // seconds
-                X509Certificate cert = generateV3Certificate(
-                        readCSR(getEncodedCSR(location, userDN).getBytes()), sec);
+                String csr = getEncodedCSR(location, userDN);
+                PKCS10CertificationRequest req = readCSR(csr.getBytes());
+                X509Certificate cert = generateV3Certificate(req, sec);
                 X509Certificate[] chain = createProxyCertChain(cert);
                 putSignedCert(location, chain, userDN);
 
                 break;
+            case HttpURLConnection.HTTP_UNAUTHORIZED:
+                throw new AccessControlException(responseMessage);
+            case HttpURLConnection.HTTP_NOT_FOUND:
+                // parent node not found
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_OK:
                 // break intentionally left out
             case HttpURLConnection.HTTP_CONFLICT:
                 // break intentionally left out
-            case HttpURLConnection.HTTP_NOT_FOUND:
-                // parent node not found
-                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
-            case HttpURLConnection.HTTP_UNAUTHORIZED:
-                throw new AccessControlException(responseMessage);
             default:
                 throw new RuntimeException("Unexpected failure mode: "
                         + responseMessage + "(" + responseCode + ")");
@@ -305,8 +308,8 @@ public class CredClient
     }
 
     /**
-     * Creates the resource (private key, public key, CSR) for userDN.
-     * Throws various exceptions when something goes wrong.
+     * Creates the resource (private key, public key, CSR) for userDN. This is the
+     * first step of the sequence used by the delegate method.
      * 
      * @param userDN
      * @return URL to the newly create resource
@@ -367,7 +370,6 @@ public class CredClient
 
     /**
      * Delete the resource (private key, public key, CSR) for userDN.
-     * Throws various exceptions when something goes wrong.
      * 
      * @param userDN
      * @throws IOException
@@ -425,16 +427,40 @@ public class CredClient
 
     }
 
-    /**
-     * Accesses the Certificate Signing Request associated with a
-     * user/location Base64 encoded
+     /**
+     * Accesses the Certificate Signing Request associated with a user
      * 
-     * @param location
-     *            URL of the resource that owns the CSR.
-     * @return Base64 encoded CSR
+     * @param userDN
+     *            The DN of the user that owns the CSR.
+     * @return CSR
      * @throws IOException
+     * @throws java.security.InvalidKeyException
+     * @throws java.security.cert.CertificateEncodingException
+     * @throws java.security.cert.CertificateParsingException
+     * @throws java.security.cert.CertificateExpiredException
+     * @throws java.security.cert.CertificateNotYetValidException
+     * @throws java.security.NoSuchProviderException
+     * @throws java.security.NoSuchAlgorithmException
+     * @throws java.security.SignatureException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      * 
      */
+    public String getEncodedCSR(X500Principal userDN) throws IOException,
+            InvalidKeyException, CertificateEncodingException,
+            CertificateParsingException, CertificateExpiredException,
+            CertificateNotYetValidException, NoSuchProviderException,
+            NoSuchAlgorithmException, SignatureException,
+            CertificateException, ResourceNotFoundException
+    {
+        String location = getLocation(userDN);
+        if (location == null)
+        {
+            throw new IllegalArgumentException(
+                    "No certificate found for " + userDN);
+        }
+        return getEncodedCSR(location, userDN);
+    }
+
     private String getEncodedCSR(String location, X500Principal userDN)
             throws IOException, InvalidKeyException,
             NoSuchProviderException, NoSuchAlgorithmException,
@@ -500,42 +526,9 @@ public class CredClient
 
     }
 
+   
     /**
-     * Accesses the Certificate Signing Request associated with a user
-     * 
-     * @param userDN
-     *            The DN of the user that owns the CSR.
-     * @return CSR
-     * @throws IOException
-     * @throws java.security.InvalidKeyException
-     * @throws java.security.cert.CertificateEncodingException
-     * @throws java.security.cert.CertificateParsingException
-     * @throws java.security.cert.CertificateExpiredException
-     * @throws java.security.cert.CertificateNotYetValidException
-     * @throws java.security.NoSuchProviderException
-     * @throws java.security.NoSuchAlgorithmException
-     * @throws java.security.SignatureException
-     * @throws ca.nrc.cadc.net.ResourceNotFoundException
-     * 
-     */
-    public String getEncodedCSR(X500Principal userDN) throws IOException,
-            InvalidKeyException, CertificateEncodingException,
-            CertificateParsingException, CertificateExpiredException,
-            CertificateNotYetValidException, NoSuchProviderException,
-            NoSuchAlgorithmException, SignatureException,
-            CertificateException, ResourceNotFoundException
-    {
-        String location = getLocation(userDN);
-        if (location == null)
-        {
-            throw new IllegalArgumentException(
-                    "No certificate found for " + userDN);
-        }
-        return getEncodedCSR(location, userDN);
-    }
-
-    /**
-     * Accesses the certificate associated with a user/location
+     * Accesses the certificate associated with a user/location.
      * 
      * @param userDN
      * @return X509Certificate from the CDP URL of the resource that owns
@@ -697,7 +690,7 @@ public class CredClient
     /**
      * Puts a signed certificate associated with a user/location.
      * 
-     * @param cert Signed certificate to put.
+     * @param chain
      * @throws IOException
      * @throws java.security.InvalidKeyException
      * @throws java.security.NoSuchProviderException
@@ -706,14 +699,14 @@ public class CredClient
      * @throws CertificateException
      * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
-    public void putSignedCert(X509Certificate cert) throws IOException,
+    public void putSignedCert(X509Certificate[] chain) throws IOException,
             InvalidKeyException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
             CertificateException, ResourceNotFoundException
     {
-        X500Principal delegatedUser = cert.getSubjectX500Principal();
+        X500Principal delegatedUser = chain[0].getSubjectX500Principal();
         String location = getLocation(delegatedUser);
-        putSignedCert(location, new X509Certificate[] { cert }, delegatedUser);
+        putSignedCert(location, chain, delegatedUser);
     }
     
     // append certficate chain with the specified cert to make a valid proxy cert
@@ -897,7 +890,7 @@ public class CredClient
         BufferedReader rdr = new BufferedReader(new InputStreamReader(
                 new ByteArrayInputStream(certBuf)));
         String line = rdr.readLine();
-        StringBuffer base64 = new StringBuffer();
+        StringBuilder base64 = new StringBuilder();
         while (line != null)
         {
             if (line.startsWith("-----BEGIN CERTIFICATE REQUEST-"))

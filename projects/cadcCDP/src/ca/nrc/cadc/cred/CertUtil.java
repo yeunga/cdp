@@ -64,10 +64,9 @@ public class CertUtil
      * @throws CertificateNotYetValidException
      * @throws CertificateExpiredException
      */
-    public static X509Certificate generateCertificate(
-            PKCS10CertificationRequest csr, int lifetime,
-            X509CertificateChain chain) throws NoSuchAlgorithmException,
-            NoSuchProviderException, InvalidKeyException,
+    public static X509Certificate generateCertificate(PKCS10CertificationRequest csr, 
+            int lifetime, X509CertificateChain chain) 
+        throws NoSuchAlgorithmException, NoSuchProviderException, InvalidKeyException,
             CertificateParsingException, CertificateEncodingException,
             SignatureException, CertificateExpiredException,
             CertificateNotYetValidException
@@ -92,8 +91,7 @@ public class CertUtil
         certGen.setSubjectDN(new X500Principal(proxyDn));
 
         // set validity
-        GregorianCalendar date = new GregorianCalendar(TimeZone
-                .getTimeZone("GMT"));
+        GregorianCalendar date = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
         // Start date. Allow for a sixty five minute clock skew here.
         date.add(Calendar.MINUTE, -65);
         Date beforeDate = date.getTime();
