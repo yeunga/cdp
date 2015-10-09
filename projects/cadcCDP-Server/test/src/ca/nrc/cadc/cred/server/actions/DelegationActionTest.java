@@ -20,25 +20,24 @@ import org.apache.log4j.Level;
 
 public class DelegationActionTest
 {
-    static File cadcRegtest1CertFile;
+    static File certFile;
 
     static
     {
         Log4jInit.setLevel("ca.nrc.cadc.cred", Level.DEBUG);
         
-        cadcRegtest1CertFile = new File("build/test/class/proxy.pem");
+        certFile = new File("build/test/class/proxy.pem");
     }
 
     @Test
     public void testTrustedPrincipals() throws Exception
     {
-        X500Principal target = new X500Principal("cn=foo,ou=cadc.o=hia,c=ca");
-        
-        X500Principal principal = new X500Principal("cn=cadcregtest1_b5d,ou=cadc,o=hia,c=ca");
+        X500Principal target = new X500Principal("cn=foo,ou=cadc,o=nrc,c=ca");
+        Subject subject = SSLUtil.createSubject(certFile);
+       
+        X500Principal principal =  subject.getPrincipals(X500Principal.class).iterator().next();
         Map<X500Principal, Float> trustedPrincipals = new HashMap<X500Principal, Float>();
         trustedPrincipals.put(principal, Float.MAX_VALUE);
-
-        Subject subject = SSLUtil.createSubject(cadcRegtest1CertFile);
 
         DelegationAction delegationAction = new DelegationStub(target, 0.1f, trustedPrincipals);
         Subject.doAs(subject, delegationAction);
@@ -47,13 +46,13 @@ public class DelegationActionTest
     @Test
     public void testUntrustedPrincipals() throws Exception
     {
-        X500Principal target = new X500Principal("cn=foo,ou=cadc.o=hia,c=ca");
+        X500Principal target = new X500Principal("cn=foo,ou=cadc,o=nrc,c=ca");
         
-        X500Principal principal = new X500Principal("cn=cadcauthtest1,ou=hia.nrc.ca,o=grid,c=ca");
+        X500Principal principal = new X500Principal("cn=somebody else,ou=cadc,o=nrc,c=ca");
         Map<X500Principal, Float> trustedPrincipals = new HashMap<X500Principal, Float>();
         trustedPrincipals.put(principal, new Float(0.0));
         
-        Subject subject = SSLUtil.createSubject(cadcRegtest1CertFile);
+        Subject subject = SSLUtil.createSubject(certFile);
 
         DelegationAction delegationAction = new DelegationStub(target, 0.1f, trustedPrincipals);
         try
