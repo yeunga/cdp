@@ -1,6 +1,77 @@
+/*
+************************************************************************
+*******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
+**************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
+*
+*  (c) 2011.                            (c) 2011.
+*  Government of Canada                 Gouvernement du Canada
+*  National Research Council            Conseil national de recherches
+*  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
+*  All rights reserved                  Tous droits réservés
+*
+*  NRC disclaims any warranties,        Le CNRC dénie toute garantie
+*  expressed, implied, or               énoncée, implicite ou légale,
+*  statutory, of any kind with          de quelque nature que ce
+*  respect to the software,             soit, concernant le logiciel,
+*  including without limitation         y compris sans restriction
+*  any warranty of merchantability      toute garantie de valeur
+*  or fitness for a particular          marchande ou de pertinence
+*  purpose. NRC shall not be            pour un usage particulier.
+*  liable in any event for any          Le CNRC ne pourra en aucun cas
+*  damages, whether direct or           être tenu responsable de tout
+*  indirect, special or general,        dommage, direct ou indirect,
+*  consequential or incidental,         particulier ou général,
+*  arising from the use of the          accessoire ou fortuit, résultant
+*  software.  Neither the name          de l'utilisation du logiciel. Ni
+*  of the National Research             le nom du Conseil National de
+*  Council of Canada nor the            Recherches du Canada ni les noms
+*  names of its contributors may        de ses  participants ne peuvent
+*  be used to endorse or promote        être utilisés pour approuver ou
+*  products derived from this           promouvoir les produits dérivés
+*  software without specific prior      de ce logiciel sans autorisation
+*  written permission.                  préalable et particulière
+*                                       par écrit.
+*
+*  This file is part of the             Ce fichier fait partie du projet
+*  OpenCADC project.                    OpenCADC.
+*
+*  OpenCADC is free software:           OpenCADC est un logiciel libre ;
+*  you can redistribute it and/or       vous pouvez le redistribuer ou le
+*  modify it under the terms of         modifier suivant les termes de
+*  the GNU Affero General Public        la “GNU Affero General Public
+*  License as published by the          License” telle que publiée
+*  Free Software Foundation,            par la Free Software Foundation
+*  either version 3 of the              : soit la version 3 de cette
+*  License, or (at your option)         licence, soit (à votre gré)
+*  any later version.                   toute version ultérieure.
+*
+*  OpenCADC is distributed in the       OpenCADC est distribué
+*  hope that it will be useful,         dans l’espoir qu’il vous
+*  but WITHOUT ANY WARRANTY;            sera utile, mais SANS AUCUNE
+*  without even the implied             GARANTIE : sans même la garantie
+*  warranty of MERCHANTABILITY          implicite de COMMERCIALISABILITÉ
+*  or FITNESS FOR A PARTICULAR          ni d’ADÉQUATION À UN OBJECTIF
+*  PURPOSE.  See the GNU Affero         PARTICULIER. Consultez la Licence
+*  General Public License for           Générale Publique GNU Affero
+*  more details.                        pour plus de détails.
+*
+*  You should have received             Vous devriez avoir reçu une
+*  a copy of the GNU Affero             copie de la Licence Générale
+*  General Public License along         Publique GNU Affero avec
+*  with OpenCADC.  If not, see          OpenCADC ; si ce n’est
+*  <http://www.gnu.org/licenses/>.      pas le cas, consultez :
+*                                       <http://www.gnu.org/licenses/>.
+*
+*  $Revision: 5 $
+*
+************************************************************************
+*/
 
 package ca.nrc.cadc.cred.client;
 
+import ca.nrc.cadc.auth.AuthMethod;
+import ca.nrc.cadc.auth.AuthenticationUtil;
+import ca.nrc.cadc.auth.HttpPrincipal;
 import ca.nrc.cadc.cred.CertUtil;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -39,38 +110,144 @@ import org.apache.log4j.Logger;
 import org.bouncycastle.jce.PKCS10CertificationRequest;
 import org.bouncycastle.openssl.PEMWriter;
 
-import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.SSLUtil;
 import ca.nrc.cadc.auth.X509CertificateChain;
+import ca.nrc.cadc.net.HttpDownload;
+import ca.nrc.cadc.net.NetUtil;
+import ca.nrc.cadc.net.ResourceNotFoundException;
+import ca.nrc.cadc.profiler.Profiler;
+import ca.nrc.cadc.reg.client.RegistryClient;
 import ca.nrc.cadc.util.Base64;
-import java.util.ArrayList;
-import java.util.List;
+import java.io.FileNotFoundException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.security.GeneralSecurityException;
+import java.security.Principal;
 
-public class CredPublicClient
+public class CredClient
 {
-    private static Logger LOGGER = Logger.getLogger(CredPublicClient.class);
-    private URL baseServiceURL;
-
+    private static Logger LOGGER = Logger.getLogger(CredClient.class);
+    
+    // these should be the full standardID of the feature; here we use a short form
+    // since CDP-1.0 doesn't specify any of these
+    private static final String DELEGATE = "delegate";
+    private static final String PROXY_CERTS = "proxy";
+    
+    private URI delegationURI;
+    private URI proxyURI;
+    private RegistryClient regClient;
+    
     // socket factory to use when connecting
     SSLSocketFactory sf;
-
-    /**
-     * Default, and only available constructor.
-     * 
-     * @param baseServiceURL
-     *            The base service URL
-     */
-    public CredPublicClient(final URL baseServiceURL)
+    
+    public CredClient(URI serviceURI)
     {
-        this.baseServiceURL = baseServiceURL;
+        if (serviceURI == null)
+            throw new IllegalArgumentException("invalid serviceURI: " + serviceURI);
+        if (serviceURI.getFragment() != null)
+            throw new IllegalArgumentException("invalid serviceURI (fragment not allowed): " + serviceURI);
+        
+        this.regClient = new RegistryClient();
+        
+        try 
+        { 
+            this.delegationURI = new URI(serviceURI.toASCIIString() + "#" + DELEGATE); 
+            this.proxyURI = new URI(serviceURI.toASCIIString() + "#" + PROXY_CERTS); 
+        } 
+        catch(URISyntaxException ex)
+        {
+            throw new RuntimeException("BUG: failed to create standardID from serviceURI + fragment", ex);
+        }
     }
 
-    public void delegate(X500Principal userDN, int days)
+    /**
+     * Get a proxy certificate for the specified user (subject). This operation is
+     * currently a custom feature of the cadcCDP-Server implementation that allows
+     * authorized callers to generate short-lived proxy certificates.
+     * 
+     * @param subject the target user
+     * @param daysValid the length of time the proxy certificate should be valid for
+     * @return 
+     * @throws CertificateException 
+     * @throws java.io.IOException 
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException 
+     */
+    public X509CertificateChain getProxyCertificate(Subject subject, double daysValid)
+            throws AccessControlException, CertificateException,  IOException, ResourceNotFoundException
+    {
+        Set<Principal> principals = subject.getPrincipals();
+        // get the first available X500, HTTP Principal
+        X500Principal x500Principal = null;
+        HttpPrincipal httpPrincipal = null;
+        for (Principal principal : principals)
+        {
+            if (principal instanceof X500Principal
+                    && x500Principal == null)
+            {
+                x500Principal = (X500Principal) principal;
+            }
+            else if (principal instanceof HttpPrincipal
+                    && httpPrincipal == null)
+            {
+                httpPrincipal = (HttpPrincipal) principal;
+            }
+        }
+
+        StringBuilder path = new StringBuilder();
+        
+        // If an X500 Principal exists, get the certificate based on the
+        // DN. Otherwise, if an HTTP Principal exists, get the 
+        // certificate based on the userid.
+        
+        try
+        {
+            if (x500Principal != null)
+            {
+                String dn = AuthenticationUtil.canonizeDistinguishedName(x500Principal.getName());
+                path.append("/dn/").append(NetUtil.encode(dn));
+            }
+            else if (httpPrincipal != null)
+            {
+                path.append("/userid/").append(httpPrincipal.getName());
+            }
+            else
+                throw new UnsupportedOperationException("current subject lacks supported principal type");
+            
+            if (daysValid > 0)
+            {
+                path.append("?daysValid=").append(String.valueOf(daysValid));
+            }
+        
+            URL url = regClient.getServiceURL(proxyURI, "https", path.toString(), AuthMethod.CERT);
+            LOGGER.debug("getCertficate: " + url.toString());
+            return downloadCertificate(url);
+        }
+        finally { }
+    }
+
+    /**
+     * Delegate credentials to the service (IVOA CDP-1.0).
+     * 
+     * @param userDN
+     * @param days
+     * @throws MalformedURLException
+     * @throws IOException
+     * @throws InvalidKeyException
+     * @throws NoSuchProviderException
+     * @throws NoSuchAlgorithmException
+     * @throws SignatureException
+     * @throws CertificateEncodingException
+     * @throws CertificateParsingException
+     * @throws CertificateExpiredException
+     * @throws CertificateNotYetValidException 
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException 
+     */
+    public void delegate(X500Principal userDN, double days)
             throws MalformedURLException, IOException,
             InvalidKeyException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
             CertificateEncodingException, CertificateParsingException,
-            CertificateExpiredException, CertificateNotYetValidException
+            CertificateExpiredException, CertificateNotYetValidException, ResourceNotFoundException
     {
         final StringBuilder resourcePath = new StringBuilder(64);
         // user does not have the group created. Through a POST.
@@ -82,8 +259,7 @@ public class CredPublicClient
                     "UTF-8"));
         }
 
-        final URL resourceURL = new URL(getBaseServiceURL()
-                + resourcePath.toString());
+        URL resourceURL = regClient.getServiceURL(delegationURI, "https", resourcePath.toString(), AuthMethod.CERT);
 
         LOGGER.debug("delegate(), URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
@@ -104,25 +280,26 @@ public class CredPublicClient
         {
             case HttpURLConnection.HTTP_CREATED:
                 String location = connection.getHeaderField("Location");
-                X509Certificate cert = generateV3Certificate(
-                        readCSR(getEncodedCSR(location, userDN).getBytes()), 
-                            days * 24 * 60 * 60);
+                int sec = (int) days * 24 * 60 * 60; // seconds
+                String csr = getEncodedCSR(location, userDN);
+                PKCS10CertificationRequest req = readCSR(csr.getBytes());
+                X509Certificate cert = generateV3Certificate(req, sec);
                 X509Certificate[] chain = createProxyCertChain(cert);
                 putSignedCert(location, chain, userDN);
 
                 break;
+            case HttpURLConnection.HTTP_UNAUTHORIZED:
+                throw new AccessControlException(responseMessage);
+            case HttpURLConnection.HTTP_NOT_FOUND:
+                // parent node not found
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_OK:
                 // break intentionally left out
             case HttpURLConnection.HTTP_CONFLICT:
                 // break intentionally left out
-            case HttpURLConnection.HTTP_NOT_FOUND:
-                // parent node not found
-                // break intentionally left out
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
-            case HttpURLConnection.HTTP_UNAUTHORIZED:
-                throw new AccessControlException(responseMessage);
             default:
                 throw new RuntimeException("Unexpected failure mode: "
                         + responseMessage + "(" + responseCode + ")");
@@ -131,14 +308,15 @@ public class CredPublicClient
     }
 
     /**
-     * Creates the resource (private key, public key, CSR) for userDN.
-     * Throws various exceptions when something goes wrong.
+     * Creates the resource (private key, public key, CSR) for userDN. This is the
+     * first step of the sequence used by the delegate method.
      * 
      * @param userDN
      * @return URL to the newly create resource
      * @throws IOException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
-    public String createResoure(X500Principal userDN) throws IOException
+    public String createResoure(X500Principal userDN) throws IOException, ResourceNotFoundException
     {
         final StringBuilder resourcePath = new StringBuilder(64);
         // user does not have the group created. Through a POST.
@@ -150,8 +328,7 @@ public class CredPublicClient
                     "UTF-8"));
         }
 
-        final URL resourceURL = new URL(getBaseServiceURL()
-                + resourcePath.toString());
+        URL resourceURL = regClient.getServiceURL(delegationURI, "https", resourcePath.toString(), AuthMethod.CERT);
 
         LOGGER.debug("delegate(), URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
@@ -178,7 +355,7 @@ public class CredPublicClient
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
                 // parent node not found
-                // break intentionally left out
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -193,14 +370,14 @@ public class CredPublicClient
 
     /**
      * Delete the resource (private key, public key, CSR) for userDN.
-     * Throws various exceptions when something goes wrong.
      * 
      * @param userDN
      * @throws IOException
      * @throws CertificateException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
     public void deleteResource(X500Principal userDN) throws IOException,
-            CertificateException
+            CertificateException, ResourceNotFoundException
     {
         String location = getLocation(userDN);
         final StringBuilder resourcePath = new StringBuilder(64);
@@ -237,9 +414,9 @@ public class CredPublicClient
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
                 // parent node not found
-                // break intentionally left out
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
-                // duplicate group
+                // duplicate
                 throw new IllegalArgumentException(responseMessage);
             case HttpURLConnection.HTTP_FORBIDDEN:
                 throw new AccessControlException(responseMessage);
@@ -250,22 +427,46 @@ public class CredPublicClient
 
     }
 
-    /**
-     * Accesses the Certificate Signing Request associated with a
-     * user/location Base64 encoded
+     /**
+     * Accesses the Certificate Signing Request associated with a user
      * 
-     * @param location
-     *            URL of the resource that owns the CSR.
-     * @return Base64 encoded CSR
+     * @param userDN
+     *            The DN of the user that owns the CSR.
+     * @return CSR
      * @throws IOException
+     * @throws java.security.InvalidKeyException
+     * @throws java.security.cert.CertificateEncodingException
+     * @throws java.security.cert.CertificateParsingException
+     * @throws java.security.cert.CertificateExpiredException
+     * @throws java.security.cert.CertificateNotYetValidException
+     * @throws java.security.NoSuchProviderException
+     * @throws java.security.NoSuchAlgorithmException
+     * @throws java.security.SignatureException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      * 
      */
+    public String getEncodedCSR(X500Principal userDN) throws IOException,
+            InvalidKeyException, CertificateEncodingException,
+            CertificateParsingException, CertificateExpiredException,
+            CertificateNotYetValidException, NoSuchProviderException,
+            NoSuchAlgorithmException, SignatureException,
+            CertificateException, ResourceNotFoundException
+    {
+        String location = getLocation(userDN);
+        if (location == null)
+        {
+            throw new IllegalArgumentException(
+                    "No certificate found for " + userDN);
+        }
+        return getEncodedCSR(location, userDN);
+    }
+
     private String getEncodedCSR(String location, X500Principal userDN)
             throws IOException, InvalidKeyException,
             NoSuchProviderException, NoSuchAlgorithmException,
             SignatureException, CertificateEncodingException,
             CertificateParsingException, CertificateExpiredException,
-            CertificateNotYetValidException
+            CertificateNotYetValidException, ResourceNotFoundException
     {
         final URL resourceURL = new URL(location + "/CSR");
         LOGGER.debug("get CSR step in delegate(), URL=" + resourceURL);
@@ -312,7 +513,7 @@ public class CredPublicClient
             case HttpURLConnection.HTTP_CONFLICT:
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
-                return null;
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -325,43 +526,27 @@ public class CredPublicClient
 
     }
 
+   
     /**
-     * Accesses the Certificate Signing Request associated with a user
+     * Accesses the certificate associated with a user/location.
      * 
      * @param userDN
-     *            The DN of the user that owns the CSR.
-     * @return CSR
-     * @throws IOException
-     * 
-     */
-    public String getEncodedCSR(X500Principal userDN) throws IOException,
-            InvalidKeyException, CertificateEncodingException,
-            CertificateParsingException, CertificateExpiredException,
-            CertificateNotYetValidException, NoSuchProviderException,
-            NoSuchAlgorithmException, SignatureException,
-            CertificateException
-    {
-        String location = getLocation(userDN);
-        if (location == null)
-        {
-            throw new IllegalArgumentException(
-                    "No certificate found for " + userDN);
-        }
-        return getEncodedCSR(location, userDN);
-    }
-
-    /**
-     * Accesses the certificate associated with a user/location
-     * 
      * @return X509Certificate from the CDP URL of the resource that owns
      *         the certificate
      * @throws IOException
+     * @throws java.security.InvalidKeyException
+     * @throws java.security.NoSuchProviderException
+     * @throws java.security.NoSuchAlgorithmException
+     * @throws java.security.SignatureException
+     * @throws java.security.cert.CertificateEncodingException
+     * @throws java.security.cert.CertificateParsingException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
     public X509Certificate[] getCertificate(X500Principal userDN)
             throws IOException, InvalidKeyException,
             NoSuchProviderException, NoSuchAlgorithmException,
             SignatureException, CertificateEncodingException,
-            CertificateParsingException, CertificateException
+            CertificateParsingException, CertificateException, ResourceNotFoundException
     {
         String location = getLocation(userDN);
         final URL resourceURL = new URL(location + "/certificate");
@@ -410,7 +595,7 @@ public class CredPublicClient
             case HttpURLConnection.HTTP_CONFLICT:
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
-                return null;
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -426,11 +611,14 @@ public class CredPublicClient
     /**
      * Gets the URL corresponding to the resource in CDP
      * 
+     * @param userDN
      * @return hash code used to access subject's resource in CDP
      * @throws IOException
+     * @throws java.security.cert.CertificateException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
     public String getLocation(X500Principal userDN) throws IOException,
-            CertificateException
+            CertificateException, ResourceNotFoundException
     {
         final StringBuilder resourcePath = new StringBuilder(64);
         // user does not have the group created. Through a POST.
@@ -442,8 +630,8 @@ public class CredPublicClient
                     "UTF-8"));
         }
 
-        final URL resourceURL = new URL(getBaseServiceURL()
-                + resourcePath.toString());
+        URL resourceURL = regClient.getServiceURL(delegationURI, "https", resourcePath.toString(), AuthMethod.CERT);
+        
         LOGGER.debug("get hash, URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
         connection.setRequestMethod("GET");
@@ -471,7 +659,11 @@ public class CredPublicClient
                         throw new CertificateException(
                                 "Only one hash expected");
                     }
-                    return baseServiceURL + "/" + hash;
+                    String hashPath = "/" + hash;
+                    URL u = regClient.getServiceURL(delegationURI, "https", hashPath, AuthMethod.CERT);
+                    if (u == null)
+                        throw new RuntimeException("BUG: failed to lookup/create URL to hash");
+                    return u.toExternalForm();
                 }
                 catch (UnsupportedEncodingException e)
                 {
@@ -482,7 +674,7 @@ public class CredPublicClient
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
                 // parent node not found
-                // break intentionally left out
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -498,18 +690,23 @@ public class CredPublicClient
     /**
      * Puts a signed certificate associated with a user/location.
      * 
-     * @param cert Signed certificate to put.
+     * @param chain
      * @throws IOException
+     * @throws java.security.InvalidKeyException
+     * @throws java.security.NoSuchProviderException
+     * @throws java.security.NoSuchAlgorithmException
+     * @throws java.security.SignatureException
      * @throws CertificateException
+     * @throws ca.nrc.cadc.net.ResourceNotFoundException
      */
-    public void putSignedCert(X509Certificate cert) throws IOException,
+    public void putSignedCert(X509Certificate[] chain) throws IOException,
             InvalidKeyException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
-            CertificateException
+            CertificateException, ResourceNotFoundException
     {
-        X500Principal delegatedUser = cert.getSubjectX500Principal();
+        X500Principal delegatedUser = chain[0].getSubjectX500Principal();
         String location = getLocation(delegatedUser);
-        putSignedCert(location, new X509Certificate[] { cert }, delegatedUser);
+        putSignedCert(location, chain, delegatedUser);
     }
     
     // append certficate chain with the specified cert to make a valid proxy cert
@@ -551,7 +748,7 @@ public class CredPublicClient
             throws IOException,
             InvalidKeyException, NoSuchProviderException,
             NoSuchAlgorithmException, SignatureException,
-            CertificateEncodingException, CertificateParsingException
+            CertificateEncodingException, CertificateParsingException, ResourceNotFoundException
     {
         LOGGER.debug("putSignedCert: " + userDN + " chain length: " + certs.length);
         
@@ -603,7 +800,7 @@ public class CredPublicClient
                 // break intentionally left out
             case HttpURLConnection.HTTP_NOT_FOUND:
                 // parent node not found
-                // break intentionally left out
+                throw new ResourceNotFoundException(responseMessage);
             case HttpURLConnection.HTTP_BAD_REQUEST:
                 // duplicate group
                 throw new IllegalArgumentException(responseMessage);
@@ -614,15 +811,6 @@ public class CredPublicClient
                         + responseMessage + "(" + responseCode + ")");
         }
 
-    }
-
-    /**
-     * 
-     * @return the base service URL
-     */
-    public URL getBaseServiceURL()
-    {
-        return baseServiceURL;
     }
 
     /**
@@ -702,7 +890,7 @@ public class CredPublicClient
         BufferedReader rdr = new BufferedReader(new InputStreamReader(
                 new ByteArrayInputStream(certBuf)));
         String line = rdr.readLine();
-        StringBuffer base64 = new StringBuffer();
+        StringBuilder base64 = new StringBuilder();
         while (line != null)
         {
             if (line.startsWith("-----BEGIN CERTIFICATE REQUEST-"))
@@ -731,5 +919,66 @@ public class CredPublicClient
         LOGGER.debug("RSA private key: " + ret.length + " bytes");
 
         return ret;
+    }
+    
+    /**
+     * Accesses the Certificate from the specified location.
+     * 
+     * @param location
+     *            URL of the resource for obtaining the certificate.
+     * @throws IOException
+     */
+    private X509CertificateChain downloadCertificate(URL location)
+        throws AccessControlException, IOException, ResourceNotFoundException
+    {
+        Profiler profiler = new Profiler(this.getClass());
+        
+        byte[] certificate = null;
+        try
+        {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            HttpDownload get = new HttpDownload(location, bos);
+            
+            get.run();
+            if ( get.getThrowable() != null)
+            {
+                if (get.getThrowable() instanceof IOException)
+                    throw (IOException) get.getThrowable();
+                
+                if (get.getThrowable() instanceof AccessControlException)
+                    throw (AccessControlException) get.getThrowable();
+                
+                if (get.getThrowable() instanceof FileNotFoundException)
+                    throw new ResourceNotFoundException(get.getThrowable().getMessage(), get.getThrowable());
+                
+                throw new RuntimeException("unexpected failure download certificate", get.getThrowable());
+            }
+            
+            certificate = bos.toByteArray();
+            LOGGER.debug("Downloaded Certificate of size: " + certificate.length);
+        }
+        finally
+        {
+            profiler.checkpoint("downloadCertificate");
+        }
+
+        if (certificate != null && certificate.length > 0)
+        {
+            try
+            {
+                return SSLUtil.readPemCertificateAndKey(certificate);
+            }
+            catch (GeneralSecurityException e)
+            {
+                LOGGER.warn(e);
+                throw new IllegalStateException("Could not parse the certificate", e);
+            }
+            finally
+            {
+                profiler.checkpoint("parseCertificate");
+            }
+        }
+        
+        throw new RuntimeException("No content in certificate");
     }
 }
