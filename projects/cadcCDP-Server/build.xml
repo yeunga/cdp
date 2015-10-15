@@ -68,8 +68,9 @@
 -->
 
 
+<!DOCTYPE project>
 <project default="build" basedir=".">
-  <property environment="env"/>
+    <property environment="env"/>
     <property file="local.build.properties" />
 
     <!-- site-specific build properties or overrides of values in opencadc.properties -->
@@ -85,35 +86,37 @@
     <!-- developer convenience: place for extra targets and properties -->
     <import file="extras.xml" optional="true" />
 
-<!-- project-specific properties -->
-  <property name="project" value="cadcCDP" />
+    <property name="project" value="cadcCDP-Server" />
 
-  <!-- JAR files to be included in classpath and war file -->
-  <property name="lib.cadcUtil" value="${lib}/cadcUtil.jar" />
-  <property name="lib.cadcRegistryClient" value="${lib}/cadcRegistryClient.jar" />
-  <property name="lib.cadcLog" value="${lib}/cadcLog.jar" />
-  
-  <property name="ext.log4j"       value="${ext.lib}/log4j.jar" />
-  <property name="ext.bouncy"       value="${ext.lib}/bcprov.jar" />
-  <!-- end of project properties -->
+    <property name="cadcLog"             value="${lib}/cadcLog.jar" />
+    <property name="cadcUtil"            value="${lib}/cadcUtil.jar" />
+    <property name="cadcCDP"             value="${lib}/cadcCDP.jar" />
+    <property name="cadcVOSI"            value="${lib}/cadcVOSI.jar" />
+    <property name="log4j"               value="${ext.lib}/log4j.jar" />
+    <property name="servlet"             value="${ext.lib}/servlet-api.jar" />
+    <property name="bouncy"              value="${ext.lib}/bcprov.jar" />
+    <property name="spring"              value="${ext.lib}/spring.jar" />
 
-  <!-- JAR files to be included in classpath for compilation -->
-  <property name="jars" value="${lib.cadcUtil}:${lib.cadcLog}:${lib.cadcRegistryClient}:${ext.log4j}:${ext.bouncy}" />
-  <property name="manifest.jars" value="${lib.cadcUtil} ${lib.cadcLog} ${lib.cadcRegistryClient} ${ext.log4j} ${ext.bouncy}" />
-  
+    <property name="jars" value="${log4j}:${servlet}:${bouncy}:${cadcLog}:${cadcUtil}:${cadcCDP}:${cadcVOSI}:${spring}" />
 
-    <target name="build" depends="compile,manifest">
+    <target name="build" depends="compile">
         <jar jarfile="${build}/lib/${project}.jar"
-            basedir="${build}/class"
-            update="no" manifest="${build}/tmp/${project}.mf" />
+                    basedir="${build}/class"
+                    update="no">
+                <include name="**/**.class" />
+        </jar>
     </target>
-  
-  <target name="manifest">
-    <manifest file="${build}/tmp/${project}.mf" mode="replace">
-      <attribute name="Main-Class" value="ca.nrc.cadc.cred.client.Main"/>
-      <attribute name="Class-Path" value="${manifest.jars}" />
-    </manifest>
-  </target>
-  
-  
+    
+    <target name="setup-test">
+        <copy overwrite="true" file="${env.CADC_PREFIX}/etc/proxy.pem" tofile="${build}/test/class/proxy.pem" />
+    </target>
+    
+    <property name="easyMock"       value="${ext.dev}/easymock.jar" />
+    <property name="junit"          value="${ext.dev}/junit.jar" />
+    <property name="cglib"          value="${ext.dev}/cglib.jar" />
+    <property name="objenesis"      value="${ext.dev}/objenesis.jar" />
+    <property name="asm"            value="${ext.dev}/asm.jar" />
+
+    <property name="testingJars"    value="${easyMock}:${junit}:${cglib}:${asm}:${objenesis}" />
+    
 </project>

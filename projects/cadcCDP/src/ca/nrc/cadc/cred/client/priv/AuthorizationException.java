@@ -34,10 +34,10 @@
 
 
 
-package ca.nrc.cadc.cred;
+package ca.nrc.cadc.cred.client.priv;
 
 /**
- * 
+ * @deprecated usage replaced with AccessControlException
  */
 public class AuthorizationException extends Exception
 {
