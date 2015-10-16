@@ -69,16 +69,13 @@
 
 package ca.nrc.cadc.cred.server.actions;
 
-import ca.nrc.cadc.auth.AuthenticationUtil;
-import ca.nrc.cadc.auth.DelegationToken;
-import ca.nrc.cadc.auth.HttpPrincipal;
-import ca.nrc.cadc.auth.PrincipalExtractor;
+import ca.nrc.cadc.auth.*;
+
 import java.util.Map;
 
 import javax.security.auth.x500.X500Principal;
 import javax.servlet.http.HttpServletRequest;
 
-import ca.nrc.cadc.auth.X509CertificateChain;
 import ca.nrc.cadc.cred.server.CertificateDAO;
 import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.profiler.Profiler;
@@ -225,17 +222,30 @@ public class DelegationActionFactory
             {
                 return null;
             }
+
+            /**
+             * Create and return a SSOCookieCredential from the request
+             *
+             * @return
+             */
+            @Override
+            public SSOCookieCredential getSSOCookieCredential()
+            {
+                return null;
+            }
         });
         log.debug("augmented: " + s);
         profiler.checkpoint("getUser");
         
         Set<X500Principal> xp = s.getPrincipals(X500Principal.class);
-        if (xp != null && !xp.isEmpty())
+        if (xp.isEmpty())
         {
-            X500Principal p = xp.iterator().next();
-            return p;
+            throw new ResourceNotFoundException("user not found: " + userid);
         }
-        throw new ResourceNotFoundException("user not found: " + userid);
+        else
+        {
+            return xp.iterator().next();
+        }
     }
 
     /**
