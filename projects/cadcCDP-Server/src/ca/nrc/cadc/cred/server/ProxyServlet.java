@@ -149,7 +149,7 @@ public class ProxyServlet extends HttpServlet
                 if (st2.countTokens() == 1)
                 {
                     principal = principalStr.trim();
-                    maxDaysValid = Float.MAX_VALUE; // no limit
+                    maxDaysValid = 30.0f;
                 }
                 else if (st2.countTokens() == 2)
                 {
