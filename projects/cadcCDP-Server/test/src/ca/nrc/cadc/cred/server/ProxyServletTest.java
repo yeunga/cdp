@@ -59,7 +59,7 @@ public class ProxyServletTest
         ProxyServlet testServlet = new ProxyServlet();
         ServletConfig configMock = createMock(ServletConfig.class);
         String expectedDN1 = "cn=test1,ou=hia.nrc.ca,o=grid,c=ca";
-        Float expectedDaysValid1 = new Float(Float.MAX_VALUE);
+        Float expectedDaysValid1 = new Float(30.0f);
         String expectedDN2 = "cn=test2,ou=hia.nrc.ca,o=grid,c=ca";
         Float expectedDaysValid2 = new Float(0.5);
         expect(configMock.getInitParameter(ProxyServlet.TRUSTED_PRINCIPALS_PARAM))

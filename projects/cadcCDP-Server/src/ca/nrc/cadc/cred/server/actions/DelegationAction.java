@@ -208,7 +208,7 @@ public abstract class DelegationAction implements
                     // Time to determine the allowed lifetime of certificate
                     float maxDaysValid = trustedPrincipals.get(trustedPrinc);
                     if (maxDaysValid < daysValid)
-                        throw new ResourceNotFoundException("Requested lifetime limitted to " + maxDaysValid);
+                        daysValid = maxDaysValid;
 
                     if (daysValid == 0)
                         daysValid = maxDaysValid;
