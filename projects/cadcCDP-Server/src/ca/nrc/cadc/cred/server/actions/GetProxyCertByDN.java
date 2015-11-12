@@ -1,9 +1,9 @@
-<!--
+/*
 ************************************************************************
 *******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
 **************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
 *
-*  (c) 2009.                            (c) 2009.
+*  (c) 2011.                            (c) 2011.
 *  Government of Canada                 Gouvernement du Canada
 *  National Research Council            Conseil national de recherches
 *  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -62,58 +62,62 @@
 *  <http://www.gnu.org/licenses/>.      pas le cas, consultez :
 *                                       <http://www.gnu.org/licenses/>.
 *
-*  $Revision: 4 $
+*  $Revision: 5 $
 *
 ************************************************************************
--->
+*/
 
+package ca.nrc.cadc.cred.server.actions;
 
-<project default="build" basedir=".">
-  <property environment="env"/>
-    <property file="local.build.properties" />
+import java.util.Map;
 
-    <!-- site-specific build properties or overrides of values in opencadc.properties -->
-    <property file="${env.CADC_PREFIX}/etc/local.properties" />
+import javax.security.auth.x500.X500Principal;
 
-    <!-- site-specific targets, e.g. install, cannot duplicate those in opencadc.targets.xml -->
-    <import file="${env.CADC_PREFIX}/etc/local.targets.xml" optional="true" />
+import ca.nrc.cadc.auth.X509CertificateChain;
+import ca.nrc.cadc.cred.server.CertificateDAO;
+import ca.nrc.cadc.net.ResourceNotFoundException;
+import ca.nrc.cadc.profiler.Profiler;
 
-    <!-- default properties and targets -->
-    <property file="${env.CADC_PREFIX}/etc/opencadc.properties" />
-    <import file="${env.CADC_PREFIX}/etc/opencadc.targets.xml"/>
+/**
+ * Delegation action to get a signed certificate chain given the
+ * end-user's X500 distinguished name.
+ */
+public class GetProxyCertByDN extends DelegationAction
+{
+    /**
+     * Constructor.
+     * 
+     * @param name
+     * @param daysValid
+     * @param trustedPrincipals
+     * @param dao
+     */
+    public GetProxyCertByDN(X500Principal name, Float daysValid,
+            Map<X500Principal, Float> trustedPrincipals, CertificateDAO dao)
+    {
+        super(name, daysValid, trustedPrincipals, dao);
+    }
 
-    <!-- developer convenience: place for extra targets and properties -->
-    <import file="extras.xml" optional="true" />
+    
 
-<!-- project-specific properties -->
-  <property name="project" value="cadcCDP" />
+    /**
+     * Perform the action by loading PEM String of Certificates and
+     * Private Key from DB.
+     * @param p
+     * @return 
+     * @throws ca.nrc.cadc.cred.server.ResourceNotFoundException 
+     */
+    @Override
+    public X509CertificateChain getCertificate(X500Principal p)
+        throws ResourceNotFoundException, 
+            Exception // plethora of certificate exceptions
+    {
+        Profiler profiler = new Profiler(this.getClass());
+        X509CertificateChain cert = certDAO.get(p);
+        profiler.checkpoint("getCertificate");
+        if (cert == null)
+            throw new ResourceNotFoundException("not found: " + p.getName());
+        return prepareCert(cert);
+    }
 
-  <!-- JAR files to be included in classpath and war file -->
-  <property name="lib.cadcUtil" value="${lib}/cadcUtil.jar" />
-  <property name="lib.cadcRegistryClient" value="${lib}/cadcRegistryClient.jar" />
-  <property name="lib.cadcLog" value="${lib}/cadcLog.jar" />
-  
-  <property name="ext.log4j"       value="${ext.lib}/log4j.jar" />
-  <property name="ext.bouncy"       value="${ext.lib}/bcprov.jar" />
-  <!-- end of project properties -->
-
-  <!-- JAR files to be included in classpath for compilation -->
-  <property name="jars" value="${lib.cadcUtil}:${lib.cadcLog}:${lib.cadcRegistryClient}:${ext.log4j}:${ext.bouncy}" />
-  <property name="manifest.jars" value="${lib.cadcUtil} ${lib.cadcLog} ${lib.cadcRegistryClient} ${ext.log4j} ${ext.bouncy}" />
-  
-
-    <target name="build" depends="compile,manifest">
-        <jar jarfile="${build}/lib/${project}.jar"
-            basedir="${build}/class"
-            update="no" manifest="${build}/tmp/${project}.mf" />
-    </target>
-  
-  <target name="manifest">
-    <manifest file="${build}/tmp/${project}.mf" mode="replace">
-      <attribute name="Main-Class" value="ca.nrc.cadc.cred.client.Main"/>
-      <attribute name="Class-Path" value="${manifest.jars}" />
-    </manifest>
-  </target>
-  
-  
-</project>
+}

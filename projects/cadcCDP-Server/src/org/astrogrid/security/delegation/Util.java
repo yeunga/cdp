@@ -1,4 +1,4 @@
-<!--
+/*
 ************************************************************************
 *******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
 **************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
@@ -8,7 +8,7 @@
 *  National Research Council            Conseil national de recherches
 *  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
 *  All rights reserved                  Tous droits réservés
-*
+*                                       
 *  NRC disclaims any warranties,        Le CNRC dénie toute garantie
 *  expressed, implied, or               énoncée, implicite ou légale,
 *  statutory, of any kind with          de quelque nature que ce
@@ -31,10 +31,10 @@
 *  software without specific prior      de ce logiciel sans autorisation
 *  written permission.                  préalable et particulière
 *                                       par écrit.
-*
+*                                       
 *  This file is part of the             Ce fichier fait partie du projet
 *  OpenCADC project.                    OpenCADC.
-*
+*                                       
 *  OpenCADC is free software:           OpenCADC est un logiciel libre ;
 *  you can redistribute it and/or       vous pouvez le redistribuer ou le
 *  modify it under the terms of         modifier suivant les termes de
@@ -44,7 +44,7 @@
 *  either version 3 of the              : soit la version 3 de cette
 *  License, or (at your option)         licence, soit (à votre gré)
 *  any later version.                   toute version ultérieure.
-*
+*                                       
 *  OpenCADC is distributed in the       OpenCADC est distribué
 *  hope that it will be useful,         dans l’espoir qu’il vous
 *  but WITHOUT ANY WARRANTY;            sera utile, mais SANS AUCUNE
@@ -54,7 +54,7 @@
 *  PURPOSE.  See the GNU Affero         PARTICULIER. Consultez la Licence
 *  General Public License for           Générale Publique GNU Affero
 *  more details.                        pour plus de détails.
-*
+*                                       
 *  You should have received             Vous devriez avoir reçu une
 *  a copy of the GNU Affero             copie de la Licence Générale
 *  General Public License along         Publique GNU Affero avec
@@ -65,55 +65,66 @@
 *  $Revision: 4 $
 *
 ************************************************************************
--->
+*/
 
+package org.astrogrid.security.delegation;
 
-<project default="build" basedir=".">
-  <property environment="env"/>
-    <property file="local.build.properties" />
+import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
 
-    <!-- site-specific build properties or overrides of values in opencadc.properties -->
-    <property file="${env.CADC_PREFIX}/etc/local.properties" />
+import org.bouncycastle.jce.PKCS10CertificationRequest;
+import org.bouncycastle.openssl.PEMReader;
 
-    <!-- site-specific targets, e.g. install, cannot duplicate those in opencadc.targets.xml -->
-    <import file="${env.CADC_PREFIX}/etc/local.targets.xml" optional="true" />
+/**
+ * @author zhangsa
+ *
+ */
+public class Util
+{
 
-    <!-- default properties and targets -->
-    <property file="${env.CADC_PREFIX}/etc/opencadc.properties" />
-    <import file="${env.CADC_PREFIX}/etc/opencadc.targets.xml"/>
+    /**
+     * @param csr
+     * @return
+     */
+    public static String getCsrString(CertificateSigningRequest csr)
+    {
+        StringWriter sw = new StringWriter();
+        try
+        {
+            csr.writePem(sw);
+        }
+        catch (IOException e)
+        {
+            e.printStackTrace();
+            throw new RuntimeException("Cannot encode CertificateSigningRequest to string.", e);
+        }
+        return sw.toString();
+    }
 
-    <!-- developer convenience: place for extra targets and properties -->
-    <import file="extras.xml" optional="true" />
+    /**
+     * Create a CertificateSigningRequest object by decoding from a string.
+     * 
+     * @param csrString
+     * @return
+     */
+    public static CertificateSigningRequest getCsrFromString(String csrString)
+    {
+        StringReader sr = new StringReader(csrString);
+        CertificateSigningRequest csr = null;
+        try
+        {
+            PEMReader pr = new PEMReader(sr);
+            csr = new CertificateSigningRequest(
+                    (PKCS10CertificationRequest) pr.readObject());
+            pr.close();
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException("Cannot Read CSR.");
+        }
+        sr.close();
+        return csr;
+    }
 
-<!-- project-specific properties -->
-  <property name="project" value="cadcCDP" />
-
-  <!-- JAR files to be included in classpath and war file -->
-  <property name="lib.cadcUtil" value="${lib}/cadcUtil.jar" />
-  <property name="lib.cadcRegistryClient" value="${lib}/cadcRegistryClient.jar" />
-  <property name="lib.cadcLog" value="${lib}/cadcLog.jar" />
-  
-  <property name="ext.log4j"       value="${ext.lib}/log4j.jar" />
-  <property name="ext.bouncy"       value="${ext.lib}/bcprov.jar" />
-  <!-- end of project properties -->
-
-  <!-- JAR files to be included in classpath for compilation -->
-  <property name="jars" value="${lib.cadcUtil}:${lib.cadcLog}:${lib.cadcRegistryClient}:${ext.log4j}:${ext.bouncy}" />
-  <property name="manifest.jars" value="${lib.cadcUtil} ${lib.cadcLog} ${lib.cadcRegistryClient} ${ext.log4j} ${ext.bouncy}" />
-  
-
-    <target name="build" depends="compile,manifest">
-        <jar jarfile="${build}/lib/${project}.jar"
-            basedir="${build}/class"
-            update="no" manifest="${build}/tmp/${project}.mf" />
-    </target>
-  
-  <target name="manifest">
-    <manifest file="${build}/tmp/${project}.mf" mode="replace">
-      <attribute name="Main-Class" value="ca.nrc.cadc.cred.client.Main"/>
-      <attribute name="Class-Path" value="${manifest.jars}" />
-    </manifest>
-  </target>
-  
-  
-</project>
+}

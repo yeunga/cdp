@@ -1,8 +1,75 @@
+/*
+************************************************************************
+*******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
+**************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
+*
+*  (c) 2015.                            (c) 2015.
+*  Government of Canada                 Gouvernement du Canada
+*  National Research Council            Conseil national de recherches
+*  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
+*  All rights reserved                  Tous droits réservés
+*
+*  NRC disclaims any warranties,        Le CNRC dénie toute garantie
+*  expressed, implied, or               énoncée, implicite ou légale,
+*  statutory, of any kind with          de quelque nature que ce
+*  respect to the software,             soit, concernant le logiciel,
+*  including without limitation         y compris sans restriction
+*  any warranty of merchantability      toute garantie de valeur
+*  or fitness for a particular          marchande ou de pertinence
+*  purpose. NRC shall not be            pour un usage particulier.
+*  liable in any event for any          Le CNRC ne pourra en aucun cas
+*  damages, whether direct or           être tenu responsable de tout
+*  indirect, special or general,        dommage, direct ou indirect,
+*  consequential or incidental,         particulier ou général,
+*  arising from the use of the          accessoire ou fortuit, résultant
+*  software.  Neither the name          de l'utilisation du logiciel. Ni
+*  of the National Research             le nom du Conseil National de
+*  Council of Canada nor the            Recherches du Canada ni les noms
+*  names of its contributors may        de ses  participants ne peuvent
+*  be used to endorse or promote        être utilisés pour approuver ou
+*  products derived from this           promouvoir les produits dérivés
+*  software without specific prior      de ce logiciel sans autorisation
+*  written permission.                  préalable et particulière
+*                                       par écrit.
+*
+*  This file is part of the             Ce fichier fait partie du projet
+*  OpenCADC project.                    OpenCADC.
+*
+*  OpenCADC is free software:           OpenCADC est un logiciel libre ;
+*  you can redistribute it and/or       vous pouvez le redistribuer ou le
+*  modify it under the terms of         modifier suivant les termes de
+*  the GNU Affero General Public        la “GNU Affero General Public
+*  License as published by the          License” telle que publiée
+*  Free Software Foundation,            par la Free Software Foundation
+*  either version 3 of the              : soit la version 3 de cette
+*  License, or (at your option)         licence, soit (à votre gré)
+*  any later version.                   toute version ultérieure.
+*
+*  OpenCADC is distributed in the       OpenCADC est distribué
+*  hope that it will be useful,         dans l’espoir qu’il vous
+*  but WITHOUT ANY WARRANTY;            sera utile, mais SANS AUCUNE
+*  without even the implied             GARANTIE : sans même la garantie
+*  warranty of MERCHANTABILITY          implicite de COMMERCIALISABILITÉ
+*  or FITNESS FOR A PARTICULAR          ni d’ADÉQUATION À UN OBJECTIF
+*  PURPOSE.  See the GNU Affero         PARTICULIER. Consultez la Licence
+*  General Public License for           Générale Publique GNU Affero
+*  more details.                        pour plus de détails.
+*
+*  You should have received             Vous devriez avoir reçu une
+*  a copy of the GNU Affero             copie de la Licence Générale
+*  General Public License along         Publique GNU Affero avec
+*  with OpenCADC.  If not, see          OpenCADC ; si ce n’est
+*  <http://www.gnu.org/licenses/>.      pas le cas, consultez :
+*                                       <http://www.gnu.org/licenses/>.
+*
+*  $Revision: 5 $
+*
+************************************************************************
+*/
 
 package ca.nrc.cadc.cred.client;
 
 import java.net.URI;
-import java.net.URL;
 import java.security.PrivilegedAction;
 import java.security.cert.X509Certificate;
 
@@ -12,9 +79,19 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 import ca.nrc.cadc.auth.CertCmdArgUtil;
+import ca.nrc.cadc.auth.HttpPrincipal;
+import ca.nrc.cadc.auth.X509CertificateChain;
+import ca.nrc.cadc.cred.CertUtil;
 import ca.nrc.cadc.reg.client.RegistryClient;
 import ca.nrc.cadc.util.ArgumentMap;
 import ca.nrc.cadc.util.Log4jInit;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.security.Principal;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Main implements PrivilegedAction<Boolean>
 {
@@ -28,16 +105,24 @@ public class Main implements PrivilegedAction<Boolean>
     public static final String ARG_D = "d";
     public static final String ARG_VIEW_CMD = "view";
     public static final String ARG_DELEGATE_CMD = "delegate";
-    public static final String ARG_VALID_DAYS = "daysvalid";
+    public static final String ARG_VALID_DAYS = "daysValid";
+    
+    public static final String ARG_GET_PROXY = "get";
+    public static final String ARG_USERID = "userid";
+    public static final String ARG_OUT = "out";
+
+
 
     // authenticated subject
     private static Subject subject;
 
     private String baseURL;
     private RegistryClient registryClient = new RegistryClient();
-    private CredPublicClient client;
+    private CredClient client;
 
-    private int daysValid;
+    private Double daysValid;
+    private String userID;
+    private PrintWriter outPEM;
 
     private static final int INIT_STATUS = 1; // exit code for
     // initialisation failure
@@ -47,9 +132,9 @@ public class Main implements PrivilegedAction<Boolean>
 
     // Operations on Cred client
     public enum Operation {
-        DELEGATE, VIEW
+        DELEGATE, VIEW, GET
     };
-
+    
     private Operation operation; // current operation on Cred client
 
     public static final String SERVICE_ID = "ivo://cadc.nrc.ca/cred";
@@ -122,9 +207,13 @@ public class Main implements PrivilegedAction<Boolean>
         {
             doDelegate();
         }
-        if (this.operation.equals(Operation.VIEW))
+        else if (this.operation.equals(Operation.VIEW))
         {
             doView();
+        }
+        else if (this.operation.equals(Operation.GET))
+        {
+            doGet();
         }
         logger.info("run - DONE");
         return new Boolean(true);
@@ -142,9 +231,7 @@ public class Main implements PrivilegedAction<Boolean>
         }
         catch (Exception e)
         {
-e.printStackTrace();
-            logger.error("failed to delegate");
-            logger.error("reason: " + e.getMessage());
+            logger.error("failed to delegate", e);
             System.exit(NET_STATUS);
         }
 
@@ -167,11 +254,32 @@ e.printStackTrace();
         }
         catch (Exception e)
         {
-            logger.error("failed to delegate");
-            logger.error("reason: " + e.getMessage());
+            logger.error("failed to delegate", e);
             System.exit(NET_STATUS);
         }
 
+    }
+    
+    private void doGet()
+    {
+        try
+        {
+            Set<Principal> ps = new HashSet<Principal>();
+            ps.add(new HttpPrincipal(userID));
+            Subject target = new Subject(true, ps, new HashSet<Object>(), new HashSet<Object>());
+                    
+            double dur = 0.0;
+            if (daysValid != null)
+                dur = daysValid;
+            
+            X509CertificateChain chain = client.getProxyCertificate(target, dur);
+            CertUtil.writePEMCertificateAndKey(chain, outPEM);
+        }
+        catch(Exception e)
+        {
+            logger.error("failed to get", e);
+            System.exit(NET_STATUS);
+        }
     }
 
     /**
@@ -182,6 +290,31 @@ e.printStackTrace();
     private void validateCommand(ArgumentMap argMap)
             throws IllegalArgumentException
     {
+        String validDaysStr = argMap.getValue(ARG_VALID_DAYS);
+        if (validDaysStr != null)
+        {
+            boolean valid = true;
+            try
+            {
+                daysValid = new Double(validDaysStr);
+                if (daysValid <= 0.0)
+                {
+                    valid = false;
+                }
+            }
+            catch (NumberFormatException ex)
+            {
+                valid = false;
+            }
+            if (valid == false)
+            {
+                logger.error(ARG_VALID_DAYS + " must be a positive double value");
+                usage();
+                System.exit(INIT_STATUS);
+            }
+        }
+        logger.info("daysValid: " + daysValid);
+            
         int numOp = 0;
         if (argMap.isSet(ARG_VIEW_CMD))
         {
@@ -192,37 +325,36 @@ e.printStackTrace();
         {
             operation = Operation.DELEGATE;
             numOp++;
-            String validDaysStr = argMap.getValue(ARG_VALID_DAYS);
-            if (validDaysStr != null)
+            
+        }
+        if (argMap.isSet(ARG_GET_PROXY))
+        {
+            numOp++;
+            operation = Operation.GET;
+            this.userID = argMap.getValue(ARG_USERID);
+            if (userID == null)
             {
-                boolean valid = true;
+                logger.error(ARG_USERID + " must be set");
+                usage();
+                System.exit(INIT_STATUS);
+            }
+            String out = argMap.getValue(ARG_OUT);
+            if (out != null)
+            {
                 try
                 {
-                    daysValid = Integer.parseInt(validDaysStr);
-                    if (daysValid < 1)
-                    {
-                        valid = false;
-                    }
+                    this.outPEM = new PrintWriter(new FileWriter(new File(out)));
                 }
-                catch (NumberFormatException ex)
+                catch(IOException ex)
                 {
-                    valid = false;
-                }
-                if (valid == false)
-                {
-                    logger.error(ARG_VALID_DAYS
-                            + " must be a positive integer value");
+                    logger.error("failed to open " + out + ": " + ex);
                     usage();
                     System.exit(INIT_STATUS);
                 }
             }
             else
-            {
-                logger.error(ARG_VALID_DAYS
-                        + " argument missing");
-                usage();
-                System.exit(INIT_STATUS);
-            }
+                this.outPEM = new PrintWriter(System.out);
+            
         }
         if (numOp != 1)
         {
@@ -230,8 +362,6 @@ e.printStackTrace();
             usage();
             System.exit(INIT_STATUS);
         }
-
-        return;
     }
 
     /**
@@ -262,16 +392,9 @@ e.printStackTrace();
 
         try
         {
-            URL baseURL = registryClient.getServiceURL(
-                    new URI(SERVICE_ID), "https");
-            if (baseURL == null)
-            {
-                logger.error("failed to find service URL for "
-                        + SERVICE_ID);
-                System.exit(INIT_STATUS);
-            }
-            this.baseURL = baseURL.toString();
-            this.client = new CredPublicClient(new URL(this.baseURL));
+            URI serviceURI = new URI(SERVICE_ID);
+            this.client = new CredClient(serviceURI);
+            logger.info("created: " + client.getClass().getSimpleName() + " for " + serviceURI);
         }
         catch (Exception e)
         {
@@ -279,9 +402,6 @@ e.printStackTrace();
             logger.error("reason: " + e.getMessage());
             System.exit(INIT_STATUS);
         }
-
-        logger.info("server uri: " + SERVICE_ID);
-        logger.info("base url: " + this.baseURL);
     }
 
     /**
@@ -290,12 +410,19 @@ e.printStackTrace();
     public static void usage()
     {
         String[] um = {
-                "Usage: java -jar cadcCDP.jar --view|(--delegate --daysvalid=<days>) [-v|--verbose|-d|--debug]",
+                "Usage: java -jar cadcCDP.jar [-v|--verbose|-d|--debug] <op> ...",
                 CertCmdArgUtil.getCertArgUsage(),
-                "                                                                                                  ",
-                "Help:                                                                                             ",
-                "java -jar cadcCDP.jar <-h | --help>                                                        ",
-                "                                                                                                  " };
+                "",
+                "Help: java -jar cadcCDP.jar <-h | --help>",
+                "",
+                "  <op> is one of:    ",
+                "  --delegate [--daysValid=<days>]",
+                "          create new proxy certificate on the server",
+                "  --get --userid=<user> [--out=<file>] [--daysValid=<days>] ",
+                "          get a new (shorter) proxy certificate from the server",
+                "  --view",
+                "          view the currently deleagted proxy certificate",
+        };
 
         for (String line : um)
             msg(line);
