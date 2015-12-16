@@ -90,7 +90,7 @@
 
   <!-- JAR files to be included in classpath and war file -->
   <property name="lib.cadcUtil" value="${lib}/cadcUtil.jar" />
-  <property name="lib.cadcRegistryClient" value="${lib}/cadcRegistryClient.jar" />
+  <property name="lib.cadcRegistryClient" value="${lib}/cadcRegistry.jar" />
   <property name="lib.cadcLog" value="${lib}/cadcLog.jar" />
   
   <property name="ext.log4j"       value="${ext.lib}/log4j.jar" />
