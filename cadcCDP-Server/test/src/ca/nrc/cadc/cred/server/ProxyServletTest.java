@@ -34,17 +34,23 @@
 
 package ca.nrc.cadc.cred.server;
 
-import static org.easymock.EasyMock.createMock;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.replay;
-import static org.junit.Assert.assertEquals;
-
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.util.Map;
 
 import javax.security.auth.x500.X500Principal;
 import javax.servlet.ServletConfig;
+import javax.servlet.http.HttpServletResponse;
 
+import ca.nrc.cadc.auth.X509CertificateChain;
+import ca.nrc.cadc.log.WebServiceLogInfo;
+import org.bouncycastle.openssl.PEMWriter;
 import org.junit.Test;
+import static org.junit.Assert.*;
+import static org.easymock.EasyMock.*;
+
 
 /**
  * Mock test of the ProxyServlet
@@ -59,9 +65,9 @@ public class ProxyServletTest
         ProxyServlet testServlet = new ProxyServlet();
         ServletConfig configMock = createMock(ServletConfig.class);
         String expectedDN1 = "cn=test1,ou=hia.nrc.ca,o=grid,c=ca";
-        Float expectedDaysValid1 = new Float(30.0f);
+        Float expectedDaysValid1 = 30.0f;
         String expectedDN2 = "cn=test2,ou=hia.nrc.ca,o=grid,c=ca";
-        Float expectedDaysValid2 = new Float(0.5);
+        Float expectedDaysValid2 = 0.5f;
         expect(configMock.getInitParameter(ProxyServlet.TRUSTED_PRINCIPALS_PARAM))
                 .andReturn((expectedDN1 + '\n' + expectedDN2 + ": " + expectedDaysValid2));
         
@@ -88,7 +94,7 @@ public class ProxyServletTest
         ProxyServlet testServlet = new ProxyServlet();
         ServletConfig configMock = createMock(ServletConfig.class);
         String expectedDN1 = "cn=test1,ou=hia.nrc.ca,o=grid,c=ca";
-        Float expectedDaysValid1 = new Float(-0.5);
+        Float expectedDaysValid1 = -0.5f;
         expect(
                 configMock
                         .getInitParameter(ProxyServlet.TRUSTED_PRINCIPALS_PARAM))
@@ -106,14 +112,68 @@ public class ProxyServletTest
         ProxyServlet testServlet = new ProxyServlet();
         ServletConfig configMock = createMock(ServletConfig.class);
         String expectedDN1 = "cn=test1,ou=hia.nrc.ca,o=grid,c=ca: WRONG FLOAT";
-        expect(
-                configMock
-                        .getInitParameter(ProxyServlet.TRUSTED_PRINCIPALS_PARAM))
-                .andReturn((expectedDN1));
+        expect(configMock.getInitParameter(
+                ProxyServlet.TRUSTED_PRINCIPALS_PARAM)).andReturn(expectedDN1);
 
         replay(configMock);
 
         testServlet.init(configMock);
 
+    }
+
+    @Test
+    public void writeCertificateChain() throws Exception
+    {
+        final String payload = "*** MY CHAIN ***\n*** MY PRIVATE KEY ***";
+
+        final ProxyServlet testSubject = new ProxyServlet()
+        {
+            /**
+             * Write out the PEM information.
+             *
+             * @param certificateChain The certificate chain to write.
+             * @param pemWriter        The PEM Writer to write out to.
+             * @throws IOException
+             */
+            @Override
+            void writePEM(final X509CertificateChain certificateChain,
+                          final PEMWriter pemWriter) throws IOException
+            {
+                pemWriter.write(payload);
+            }
+        };
+
+        final WebServiceLogInfo mockLogInfo =
+                createMock(WebServiceLogInfo.class);
+        final HttpServletResponse mockResponse =
+                createMock(HttpServletResponse.class);
+        final X509CertificateChain mockCertificateChain =
+                createMock(X509CertificateChain.class);
+        final Writer writer = new StringWriter();
+        final PrintWriter printWriter = new PrintWriter(writer);
+
+        mockResponse.setStatus(200);
+        expectLastCall().once();
+
+        mockResponse.setContentType(ProxyServlet.CERTIFICATE_CONTENT_TYPE);
+        expectLastCall().once();
+
+        mockResponse.setHeader("Content-Disposition",
+                               "attachment; filename=cadcproxy.pem");
+        expectLastCall().once();
+
+        expect(mockResponse.getWriter()).andReturn(printWriter).once();
+
+        mockLogInfo.setBytes(new Integer(payload.length()).longValue());
+        expectLastCall().once();
+
+        replay(mockResponse, mockLogInfo, mockCertificateChain);
+
+        testSubject.writeCertificateChain(mockCertificateChain, mockResponse,
+                                          mockLogInfo);
+
+        assertEquals("Wrong output.", payload, writer.toString());
+
+        verify(mockResponse, mockLogInfo, mockCertificateChain);
     }
 }

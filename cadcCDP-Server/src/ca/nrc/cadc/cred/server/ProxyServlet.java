@@ -71,9 +71,7 @@ package ca.nrc.cadc.cred.server;
 
 import ca.nrc.cadc.auth.AuthMethod;
 import java.io.BufferedWriter;
-import java.io.FilterOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.security.AccessControlException;
 import java.security.PrivilegedActionException;
 import java.util.Collections;
@@ -113,19 +111,24 @@ public class ProxyServlet extends HttpServlet
     public static final String DSNAME = "datasource";
     public static final String CATALOG = "catalog";
     public static final String SCHEMA = "schema";
+
+    static final String CERTIFICATE_CONTENT_TYPE =
+            "application/x-x509-user-cert";
+    static final String CERTIFICATE_FILENAME = "cadcproxy.pem";
     
     private static final long serialVersionUID = 2740612605831266225L;
     private static Logger LOGGER = Logger.getLogger(ProxyServlet.class);
 
     // The set of trusted principals allowed to call this service
-    private Map<X500Principal, Float> trustedPrincipals = new HashMap<X500Principal, Float>();
+    private Map<X500Principal, Float> trustedPrincipals =
+            new HashMap<X500Principal, Float>();
     private String dataSourceName;
     private String database;
     private String schema;
 
     /**
      * Read the configuration.
-     * @param config
+     * @param config            The ServletConfig as provided by the container.
      * @throws javax.servlet.ServletException
      */
     @Override
@@ -134,18 +137,20 @@ public class ProxyServlet extends HttpServlet
     {
         super.init(config);
         // get the trusted principals from config
-        String trustedPrincipalsValue = config.getInitParameter(TRUSTED_PRINCIPALS_PARAM);
+        String trustedPrincipalsValue =
+                config.getInitParameter(TRUSTED_PRINCIPALS_PARAM);
         if (trustedPrincipalsValue != null)
         {
-            StringTokenizer st = new StringTokenizer(trustedPrincipalsValue, "\n\t\r", false);
+            StringTokenizer st = new StringTokenizer(trustedPrincipalsValue,
+                                                     "\n\t\r", false);
             while (st.hasMoreTokens())
             {
                 String principalStr = st.nextToken();
-                StringTokenizer st2 = new StringTokenizer(principalStr, ":", false);
-                String principal = null; // the principal of the
-                // trusted client
-                Float maxDaysValid = null; // maximum lifetime of the
-                // returned proxy
+                StringTokenizer st2 = new StringTokenizer(principalStr, ":",
+                                                          false);
+                final String principal; // the principal of the trusted client
+                final Float maxDaysValid; // maximum lifetime of the returned proxy
+
                 if (st2.countTokens() == 1)
                 {
                     principal = principalStr.trim();
@@ -158,17 +163,20 @@ public class ProxyServlet extends HttpServlet
                     if (maxDaysValid <= 0)
                     {
                         throw new IllegalArgumentException(
-                                "Maximum valid days must be positive, " + maxDaysValid);
+                                "Maximum valid days must be positive, "
+                                + maxDaysValid);
                     }
                 }
                 else
                 {
                     throw new IllegalArgumentException(
-                            "Cannot parse trusted principal from servlet config: "
-                                    + principalStr);
+                            "Cannot parse trusted principal from servlet " +
+                            "config: " + principalStr);
                 }
-                LOGGER.info("trusted: " + principal + " , max days valid: " + maxDaysValid);
-                trustedPrincipals.put(new X500Principal(principal), maxDaysValid);
+                LOGGER.info("trusted: " + principal + " , max days valid: "
+                            + maxDaysValid);
+                trustedPrincipals.put(new X500Principal(principal),
+                                      maxDaysValid);
             }
         }
         
@@ -176,7 +184,126 @@ public class ProxyServlet extends HttpServlet
         this.database = config.getInitParameter(CATALOG);
         this.schema = config.getInitParameter(SCHEMA);
         
-        LOGGER.info("persistence: " + dataSourceName + " " + database + " " + schema);
+        LOGGER.info("persistence: " + dataSourceName + " " + database + " "
+                    + schema);
+    }
+
+    /**
+     * Obtain the current Subject.
+     *
+     * @param request       The HTTP Request.
+     * @return              Subject for the current Request, or null if none.
+     * @throws IOException
+     */
+    Subject getCurrentSubject(final HttpServletRequest request)
+            throws IOException
+    {
+        return AuthenticationUtil.getSubject(request);
+    }
+
+    /**
+     * Obtain the current X509 certificate chain.
+     * @param request       The HTTP Request.
+     * @param subject       The current Subject.
+     * @return              X509CertificateChain instance.
+     * @throws Exception
+     */
+    X509CertificateChain getX509CertificateChain(
+            final HttpServletRequest request, final Subject subject)
+            throws Exception
+    {
+        AuthMethod am = AuthenticationUtil.getAuthMethod(subject);
+        if ((am == null) || AuthMethod.ANON.equals(am))
+        {
+            throw new AccessControlException("permission denied");
+        }
+
+        DelegationActionFactory factory = new DelegationActionFactory(
+                request, trustedPrincipals, dataSourceName, database, schema);
+        DelegationAction delegationAction = factory.getDelegationAction();
+
+        X509CertificateChain certificateChain;
+        try
+        {
+            certificateChain = Subject.doAs(subject, delegationAction);
+        }
+        catch(PrivilegedActionException ex)
+        {
+            throw ex.getException();
+        }
+
+        if (certificateChain.getChain() == null)
+        {
+            throw new ResourceNotFoundException("No signed certificate");
+        }
+        else
+        {
+            return certificateChain;
+        }
+    }
+
+    /**
+     * Write out the certificate chain to the response as a download.
+     *
+     * @param certificateChain      The X509CertificateChain instance to write.
+     * @param response              The HTTP Response.
+     * @param logInfo               The logging object to update.
+     * @throws Exception
+     */
+    void writeCertificateChain(final X509CertificateChain certificateChain,
+                               final HttpServletResponse response,
+                               final WebServiceLogInfo logInfo)
+            throws Exception
+    {
+        // This is streamed directly, so there is no way to set the content
+        // length.
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.setContentType(CERTIFICATE_CONTENT_TYPE);
+        response.setHeader("Content-Disposition",
+                           "attachment; filename=" + CERTIFICATE_FILENAME);
+        final ByteCountWriter out =
+                new ByteCountWriter(new BufferedWriter(response.getWriter(),
+                                                       8192));
+        final PEMWriter pemWriter = new PEMWriter(out);
+
+        try
+        {
+            writePEM(certificateChain, pemWriter);
+        }
+        finally
+        {
+            try
+            {
+                pemWriter.close();
+            }
+            catch(IOException ex)
+            {
+                // Do nothing
+            }
+
+            logInfo.setBytes(out.getByteCount());
+        }
+    }
+
+    /**
+     * Write out the PEM information.
+     *
+     * @param certificateChain      The certificate chain to write.
+     * @param pemWriter             The PEM Writer to write out to.
+     * @throws IOException
+     */
+    void writePEM(final X509CertificateChain certificateChain,
+                  final PEMWriter pemWriter) throws IOException
+    {
+        pemWriter.writeObject(certificateChain.getChain()[0]);
+        pemWriter.writeObject(certificateChain.getPrivateKey());
+
+        for (int i = 1; i < certificateChain.getChain().length; i++)
+        {
+            pemWriter.writeObject(certificateChain.getChain()[i]);
+        }
+
+        pemWriter.flush();
     }
 
     /**
@@ -187,7 +314,8 @@ public class ProxyServlet extends HttpServlet
      * @throws java.io.IOException
      */
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) 
+    protected void doGet(HttpServletRequest request,
+                         HttpServletResponse response)
         throws IOException
     {
         WebServiceLogInfo logInfo = new ServletLogInfo(request);
@@ -195,61 +323,13 @@ public class ProxyServlet extends HttpServlet
         long start = System.currentTimeMillis();
         try
         {
-            Subject subject = AuthenticationUtil.getSubject(request);
+            final Subject subject = getCurrentSubject(request);
             logInfo.setSubject(subject);
             
-            AuthMethod am = AuthenticationUtil.getAuthMethod(subject);
-            if (am == null || AuthMethod.ANON.equals(am))
-                throw new AccessControlException("permission denied");
-            
-            DelegationActionFactory factory = new DelegationActionFactory(
-                    request, trustedPrincipals, dataSourceName, database, schema);
-            DelegationAction delegationAction = factory.getDelegationAction();
+            final X509CertificateChain certificateChain =
+                    getX509CertificateChain(request, subject);
 
-            X509CertificateChain certkey;
-            try
-            {
-                certkey = Subject.doAs(subject, delegationAction);
-            }
-            catch(PrivilegedActionException ex)
-            {
-                throw ex.getException();
-            }
-            
-            if (certkey.getChain() == null)
-            {
-                throw new ResourceNotFoundException("No signed certificate");
-            }
-
-            // this is streamed directly, so there is no way to set the content length
-            response.setStatus(HttpServletResponse.SC_OK);
-            response.setContentType("application/x-x509-user-cert");
-            ByteCountWriter out = new ByteCountWriter(new BufferedWriter(response.getWriter(), 8192));
-            PEMWriter pemWriter = new PEMWriter(out);
-
-            try
-            {
-                pemWriter.writeObject(certkey.getChain()[0]);
-                pemWriter.writeObject(certkey.getPrivateKey());
-
-                for (int i = 1; i < certkey.getChain().length; i++)
-                {
-                    pemWriter.writeObject(certkey.getChain()[i]);
-                }
-                pemWriter.flush();
-            }
-            finally
-            {
-                try 
-                { 
-                    pemWriter.close(); 
-                }
-                catch(IOException ex)
-                {
-                    // TODO
-                }
-     		logInfo.setBytes(out.getByteCount());
-            }
+            writeCertificateChain(certificateChain, response, logInfo);
         }
         catch(IllegalArgumentException ex)
         {
@@ -306,29 +386,8 @@ public class ProxyServlet extends HttpServlet
         pw.close();
     }
 
-    /**
-     * OutputStream wrapper that ensures close() is not called.
-     * 
-     * @author majorb
-     * 
-     */
-    private class SafeOutputStream extends FilterOutputStream
-    {
-        SafeOutputStream(OutputStream ostream)
-        {
-            super(ostream);
-        }
-
-        @Override
-        public void close() throws IOException
-        {
-            // do nothing
-        }
-    }
-
     public Map<X500Principal, Float> getTrustedPrincipals()
     {
-        
         return Collections.unmodifiableMap(trustedPrincipals);
     }
 }

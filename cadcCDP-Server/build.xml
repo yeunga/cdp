@@ -67,56 +67,55 @@
 ************************************************************************
 -->
 
-
 <!DOCTYPE project>
-<project default="build" basedir=".">
-    <property environment="env"/>
-    <property file="local.build.properties" />
+<project name="cadcCDP-Server" default="build" basedir=".">
+  <property environment="env"/>
+  <property file="local.build.properties"/>
 
-    <!-- site-specific build properties or overrides of values in opencadc.properties -->
-    <property file="${env.CADC_PREFIX}/etc/local.properties" />
+  <!-- site-specific build properties or overrides of values in opencadc.properties -->
+  <property file="${env.CADC_PREFIX}/etc/local.properties"/>
 
-    <!-- site-specific targets, e.g. install, cannot duplicate those in opencadc.targets.xml -->
-    <import file="${env.CADC_PREFIX}/etc/local.targets.xml" optional="true" />
+  <!-- site-specific targets, e.g. install, cannot duplicate those in opencadc.targets.xml -->
+  <import file="${env.CADC_PREFIX}/etc/local.targets.xml" optional="true"/>
 
-    <!-- default properties and targets -->
-    <property file="${env.CADC_PREFIX}/etc/opencadc.properties" />
-    <import file="${env.CADC_PREFIX}/etc/opencadc.targets.xml"/>
+  <!-- default properties and targets -->
+  <property file="${env.CADC_PREFIX}/etc/opencadc.properties"/>
+  <import file="${env.CADC_PREFIX}/etc/opencadc.targets.xml"/>
 
-    <!-- developer convenience: place for extra targets and properties -->
-    <import file="extras.xml" optional="true" />
+  <!-- developer convenience: place for extra targets and properties -->
+  <import file="extras.xml" optional="true"/>
 
-    <property name="project" value="cadcCDP-Server" />
+  <property name="project" value="cadcCDP-Server"/>
 
-    <property name="cadcLog"             value="${lib}/cadcLog.jar" />
-    <property name="cadcUtil"            value="${lib}/cadcUtil.jar" />
-    <property name="cadcCDP"             value="${lib}/cadcCDP.jar" />
-    <property name="cadcVOSI"            value="${lib}/cadcVOSI.jar" />
-    <property name="log4j"               value="${ext.lib}/log4j.jar" />
-    <property name="servlet"             value="${ext.lib}/servlet-api.jar" />
-    <property name="bouncy"              value="${ext.lib}/bcprov.jar" />
-    <property name="spring"              value="${ext.lib}/spring.jar" />
+  <property name="cadcLog" value="${lib}/cadcLog.jar"/>
+  <property name="cadcUtil" value="${lib}/cadcUtil.jar"/>
+  <property name="cadcCDP" value="${lib}/cadcCDP.jar"/>
+  <property name="cadcVOSI" value="${lib}/cadcVOSI.jar"/>
+  <property name="log4j" value="${ext.lib}/log4j.jar"/>
+  <property name="servlet" value="${ext.lib}/servlet-api.jar"/>
+  <property name="bouncy" value="${ext.lib}/bcprov.jar"/>
+  <property name="spring" value="${ext.lib}/spring.jar"/>
 
-    <property name="jars" value="${log4j}:${servlet}:${bouncy}:${cadcLog}:${cadcUtil}:${cadcCDP}:${cadcVOSI}:${spring}" />
+  <property name="jars"
+            value="${log4j}:${servlet}:${bouncy}:${cadcLog}:${cadcUtil}:${cadcCDP}:${cadcVOSI}:${spring}"/>
 
-    <target name="build" depends="compile">
-        <jar jarfile="${build}/lib/${project}.jar"
-                    basedir="${build}/class"
-                    update="no">
-                <include name="**/**.class" />
-        </jar>
-    </target>
-    
-    <target name="setup-test">
-        <copy overwrite="true" file="${env.CADC_PREFIX}/etc/proxy.pem" tofile="${build}/test/class/proxy.pem" />
-    </target>
-    
-    <property name="easyMock"       value="${ext.dev}/easymock.jar" />
-    <property name="junit"          value="${ext.dev}/junit.jar" />
-    <property name="cglib"          value="${ext.dev}/cglib.jar" />
-    <property name="objenesis"      value="${ext.dev}/objenesis.jar" />
-    <property name="asm"            value="${ext.dev}/asm.jar" />
+  <target name="build" depends="compile">
+    <jar jarfile="${build}/lib/${project}.jar"
+         basedir="${build}/class"
+         update="no">
+      <include name="**/**.class"/>
+    </jar>
+  </target>
 
-    <property name="testingJars"    value="${easyMock}:${junit}:${cglib}:${asm}:${objenesis}" />
-    
+  <target name="setup-test">
+    <copy overwrite="true" file="${env.CADC_PREFIX}/etc/proxy.pem"
+          tofile="${build}/test/class/proxy.pem"/>
+  </target>
+
+  <property name="easyMock" value="${ext.dev}/easymock.jar"/>
+  <property name="junit" value="${ext.dev}/junit.jar"/>
+  <property name="objenesis" value="${ext.dev}/objenesis.jar"/>
+
+  <property name="testingJars" value="${junit}:${objenesis}:${easyMock}"/>
+
 </project>
