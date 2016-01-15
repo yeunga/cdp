@@ -112,8 +112,14 @@ public class ProxyServlet extends HttpServlet
     public static final String CATALOG = "catalog";
     public static final String SCHEMA = "schema";
 
-    static final String CERTIFICATE_CONTENT_TYPE =
-            "application/x-x509-user-cert";
+    // Story 1874
+    // Content Type changed from application/x-x509-user-cert to
+    // application/x-pem-file to accommodate browser downloads, and for
+    // accuracy of the final file downloaded.
+    //
+    // jenkinsd 2016.01.15
+    //
+    static final String CERTIFICATE_CONTENT_TYPE = "application/x-pem-file";
     static final String CERTIFICATE_FILENAME = "cadcproxy.pem";
     
     private static final long serialVersionUID = 2740612605831266225L;

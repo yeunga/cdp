@@ -112,9 +112,9 @@
           tofile="${build}/test/class/proxy.pem"/>
   </target>
 
-  <property name="easyMock" value="${ext.dev}/easymock.jar"/>
+  <property name="easyMock" value="${ext.dev}/easymock-3.4.jar"/>
   <property name="junit" value="${ext.dev}/junit.jar"/>
-  <property name="objenesis" value="${ext.dev}/objenesis.jar"/>
+  <property name="objenesis" value="${ext.dev}/objenesis-2.2.jar"/>
 
   <property name="testingJars" value="${junit}:${objenesis}:${easyMock}"/>
 
