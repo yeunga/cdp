@@ -92,6 +92,7 @@ import java.io.PrintWriter;
 import java.security.Principal;
 import java.util.HashSet;
 import java.util.Set;
+import javax.security.auth.x500.X500Principal;
 
 public class Main implements PrivilegedAction<Boolean>
 {
@@ -109,6 +110,7 @@ public class Main implements PrivilegedAction<Boolean>
     
     public static final String ARG_GET_PROXY = "get";
     public static final String ARG_USERID = "userid";
+    public static final String ARG_USERDN = "userdn";
     public static final String ARG_OUT = "out";
 
 
@@ -122,6 +124,7 @@ public class Main implements PrivilegedAction<Boolean>
 
     private Double daysValid;
     private String userID;
+    private String userDN;
     private PrintWriter outPEM;
 
     private static final int INIT_STATUS = 1; // exit code for
@@ -265,7 +268,10 @@ public class Main implements PrivilegedAction<Boolean>
         try
         {
             Set<Principal> ps = new HashSet<Principal>();
-            ps.add(new HttpPrincipal(userID));
+            if (userID != null)
+                ps.add(new HttpPrincipal(userID));
+            else // userDN
+                ps.add(new X500Principal(userDN));
             Subject target = new Subject(true, ps, new HashSet<Object>(), new HashSet<Object>());
                     
             double dur = 0.0;
@@ -332,9 +338,10 @@ public class Main implements PrivilegedAction<Boolean>
             numOp++;
             operation = Operation.GET;
             this.userID = argMap.getValue(ARG_USERID);
-            if (userID == null)
+            this.userDN = argMap.getValue(ARG_USERDN);
+            if ( (userID == null && userDN == null) || (userID != null && userDN != null) )
             {
-                logger.error(ARG_USERID + " must be set");
+                logger.error("one of: " + ARG_USERID + " or " + ARG_USERDN + " must be set");
                 usage();
                 System.exit(INIT_STATUS);
             }
@@ -418,8 +425,9 @@ public class Main implements PrivilegedAction<Boolean>
                 "  <op> is one of:    ",
                 "  --delegate [--daysValid=<days>]",
                 "          create new proxy certificate on the server",
-                "  --get --userid=<user> [--out=<file>] [--daysValid=<days>] ",
-                "          get a new (shorter) proxy certificate from the server",
+                "  --get --userid=<username> [--out=<file>] [--daysValid=<days>] ",
+                "  --get --userdn=<user distinguished name> [--out=<file>] [--daysValid=<days>] ",
+                "          get a new (shorter) proxy certificate from the server;",
                 "  --view",
                 "          view the currently deleagted proxy certificate",
         };
