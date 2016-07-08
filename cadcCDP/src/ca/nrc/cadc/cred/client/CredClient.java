@@ -72,10 +72,28 @@ package ca.nrc.cadc.cred.client;
 import ca.nrc.cadc.auth.AuthMethod;
 import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.HttpPrincipal;
+import ca.nrc.cadc.auth.SSLUtil;
+import ca.nrc.cadc.auth.X509CertificateChain;
 import ca.nrc.cadc.cred.CertUtil;
+import ca.nrc.cadc.net.HttpDownload;
+import ca.nrc.cadc.net.NetUtil;
+import ca.nrc.cadc.net.ResourceNotFoundException;
+import ca.nrc.cadc.profiler.Profiler;
+import ca.nrc.cadc.reg.Standards;
+import ca.nrc.cadc.reg.client.RegistryClient;
+import ca.nrc.cadc.util.Base64;
+import org.apache.log4j.Logger;
+import org.bouncycastle.jce.PKCS10CertificationRequest;
+import org.bouncycastle.openssl.PEMWriter;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSocketFactory;
+import javax.security.auth.Subject;
+import javax.security.auth.x500.X500Principal;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -84,14 +102,17 @@ import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.security.AccessControlContext;
 import java.security.AccessControlException;
 import java.security.AccessController;
+import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.Principal;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
@@ -101,63 +122,22 @@ import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.util.Set;
 
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLSocketFactory;
-import javax.security.auth.Subject;
-import javax.security.auth.x500.X500Principal;
-
-import org.apache.log4j.Logger;
-import org.bouncycastle.jce.PKCS10CertificationRequest;
-import org.bouncycastle.openssl.PEMWriter;
-
-import ca.nrc.cadc.auth.SSLUtil;
-import ca.nrc.cadc.auth.X509CertificateChain;
-import ca.nrc.cadc.net.HttpDownload;
-import ca.nrc.cadc.net.NetUtil;
-import ca.nrc.cadc.net.ResourceNotFoundException;
-import ca.nrc.cadc.profiler.Profiler;
-import ca.nrc.cadc.reg.client.RegistryClient;
-import ca.nrc.cadc.util.Base64;
-import java.io.FileNotFoundException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.security.GeneralSecurityException;
-import java.security.Principal;
-
 public class CredClient
 {
     private static Logger LOGGER = Logger.getLogger(CredClient.class);
     
-    // these should be the full standardID of the feature; here we use a short form
-    // since CDP-1.0 doesn't specify any of these
-    private static final String DELEGATE = "delegate";
-    private static final String PROXY_CERTS = "proxy";
-    
-    private URI delegationURI;
-    private URI proxyURI;
-    private RegistryClient regClient;
-    
     // socket factory to use when connecting
     SSLSocketFactory sf;
+
+    private URI serviceID;
     
-    public CredClient(URI serviceURI)
+    public CredClient(URI serviceID)
     {
-        if (serviceURI == null)
-            throw new IllegalArgumentException("invalid serviceURI: " + serviceURI);
-        if (serviceURI.getFragment() != null)
-            throw new IllegalArgumentException("invalid serviceURI (fragment not allowed): " + serviceURI);
-        
-        this.regClient = new RegistryClient();
-        
-        try 
-        { 
-            this.delegationURI = new URI(serviceURI.toASCIIString() + "#" + DELEGATE); 
-            this.proxyURI = new URI(serviceURI.toASCIIString() + "#" + PROXY_CERTS); 
-        } 
-        catch(URISyntaxException ex)
-        {
-            throw new RuntimeException("BUG: failed to create standardID from serviceURI + fragment", ex);
-        }
+        if (serviceID == null)
+            throw new IllegalArgumentException("invalid serviceID: " + serviceID);
+        if (serviceID.getFragment() != null)
+            throw new IllegalArgumentException("invalid serviceID (fragment not allowed): " + serviceID);
+        this.serviceID = serviceID;
     }
 
     /**
@@ -217,8 +197,10 @@ public class CredClient
             {
                 path.append("?daysValid=").append(String.valueOf(daysValid));
             }
-        
-            URL url = regClient.getServiceURL(proxyURI, "https", path.toString(), AuthMethod.CERT);
+
+            URL credUrl = getRegistryClient()
+                .getServiceURL(this.serviceID, Standards.CRED_PROXY_10_URI, AuthMethod.CERT);
+            URL url = new URL(credUrl.toExternalForm() + "/" + path.toString());
             LOGGER.debug("getCertficate: " + url.toString());
             return downloadCertificate(url);
         }
@@ -259,7 +241,9 @@ public class CredClient
                     "UTF-8"));
         }
 
-        URL resourceURL = regClient.getServiceURL(delegationURI, "https", resourcePath.toString(), AuthMethod.CERT);
+        URL credUrl = getRegistryClient()
+            .getServiceURL(this.serviceID, Standards.CRED_DELEGATE_10_URI, AuthMethod.CERT);
+        URL resourceURL = new URL(credUrl.toExternalForm() + "/" + resourcePath.toString());
 
         LOGGER.debug("delegate(), URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
@@ -328,7 +312,9 @@ public class CredClient
                     "UTF-8"));
         }
 
-        URL resourceURL = regClient.getServiceURL(delegationURI, "https", resourcePath.toString(), AuthMethod.CERT);
+        URL credUrl = getRegistryClient()
+            .getServiceURL(this.serviceID, Standards.CRED_DELEGATE_10_URI, AuthMethod.CERT);
+        URL resourceURL = new URL(credUrl.toExternalForm() + "/" + resourcePath.toString());
 
         LOGGER.debug("delegate(), URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
@@ -630,7 +616,9 @@ public class CredClient
                     "UTF-8"));
         }
 
-        URL resourceURL = regClient.getServiceURL(delegationURI, "https", resourcePath.toString(), AuthMethod.CERT);
+        URL credUrl = getRegistryClient()
+            .getServiceURL(this.serviceID, Standards.CRED_DELEGATE_10_URI, AuthMethod.CERT);
+        URL resourceURL = new URL(credUrl.toExternalForm() + "/" + resourcePath.toString());
         
         LOGGER.debug("get hash, URL=" + resourceURL);
         HttpURLConnection connection = openConnection(resourceURL);
@@ -660,9 +648,7 @@ public class CredClient
                                 "Only one hash expected");
                     }
                     String hashPath = "/" + hash;
-                    URL u = regClient.getServiceURL(delegationURI, "https", hashPath, AuthMethod.CERT);
-                    if (u == null)
-                        throw new RuntimeException("BUG: failed to lookup/create URL to hash");
+                    URL u = new URL(credUrl.toExternalForm() + "/" + hashPath);
                     return u.toExternalForm();
                 }
                 catch (UnsupportedEncodingException e)
@@ -739,7 +725,7 @@ public class CredClient
      * 
      * @param location
      *            URL of the resource that owns the certificate
-     * @param cert
+     * @param certs
      *            Signed certificate to put.
      * @throws IOException
      */
@@ -883,6 +869,11 @@ public class CredClient
     {
         byte[] crt = getCSR(code);
         return new PKCS10CertificationRequest(crt);
+    }
+
+    protected RegistryClient getRegistryClient()
+    {
+        return new RegistryClient();
     }
 
     static byte[] getCSR(byte[] certBuf) throws IOException
