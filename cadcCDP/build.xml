@@ -114,6 +114,9 @@
       <attribute name="Class-Path" value="${manifest.jars}" />
     </manifest>
   </target>
-  
+
+  <target name="test">
+    <echo message="tests not implemented"/>
+  </target>
   
 </project>

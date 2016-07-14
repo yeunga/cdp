@@ -199,7 +199,7 @@ public class CredClient
             }
 
             URL credUrl = getRegistryClient()
-                .getServiceURL(this.serviceID, Standards.CRED_PROXY_10_URI, AuthMethod.CERT);
+                .getServiceURL(this.serviceID, Standards.CRED_PROXY_10, AuthMethod.CERT);
             URL url = new URL(credUrl.toExternalForm() + "/" + path.toString());
             LOGGER.debug("getCertficate: " + url.toString());
             return downloadCertificate(url);
@@ -242,7 +242,7 @@ public class CredClient
         }
 
         URL credUrl = getRegistryClient()
-            .getServiceURL(this.serviceID, Standards.CRED_DELEGATE_10_URI, AuthMethod.CERT);
+            .getServiceURL(this.serviceID, Standards.CRED_DELEGATE_10, AuthMethod.CERT);
         URL resourceURL = new URL(credUrl.toExternalForm() + "/" + resourcePath.toString());
 
         LOGGER.debug("delegate(), URL=" + resourceURL);
@@ -313,7 +313,7 @@ public class CredClient
         }
 
         URL credUrl = getRegistryClient()
-            .getServiceURL(this.serviceID, Standards.CRED_DELEGATE_10_URI, AuthMethod.CERT);
+            .getServiceURL(this.serviceID, Standards.CRED_DELEGATE_10, AuthMethod.CERT);
         URL resourceURL = new URL(credUrl.toExternalForm() + "/" + resourcePath.toString());
 
         LOGGER.debug("delegate(), URL=" + resourceURL);
@@ -617,7 +617,7 @@ public class CredClient
         }
 
         URL credUrl = getRegistryClient()
-            .getServiceURL(this.serviceID, Standards.CRED_DELEGATE_10_URI, AuthMethod.CERT);
+            .getServiceURL(this.serviceID, Standards.CRED_DELEGATE_10, AuthMethod.CERT);
         URL resourceURL = new URL(credUrl.toExternalForm() + "/" + resourcePath.toString());
         
         LOGGER.debug("get hash, URL=" + resourceURL);
