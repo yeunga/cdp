@@ -198,9 +198,11 @@ public class CredClient
                 path.append("?daysValid=").append(String.valueOf(daysValid));
             }
 
+            LOGGER.debug("serviceID: " + this.serviceID);
             URL credUrl = getRegistryClient()
                 .getServiceURL(this.serviceID, Standards.CRED_PROXY_10, AuthMethod.CERT);
-            URL url = new URL(credUrl.toExternalForm() + "/" + path.toString());
+            LOGGER.debug("credUrl is null: " + (credUrl == null));
+            URL url = new URL(credUrl.toExternalForm() + path.toString());
             LOGGER.debug("getCertficate: " + url.toString());
             return downloadCertificate(url);
         }
