@@ -94,12 +94,14 @@
   <property name="lib.cadcLog" value="${lib}/cadcLog.jar" />
   
   <property name="ext.log4j"       value="${ext.lib}/log4j.jar" />
+  <property name="ext.jdom2"       value="${ext.lib}/jdom2.jar" />
+  <property name="ext.xerces"       value="${ext.lib}/xerces.jar" />
   <property name="ext.bouncy"       value="${ext.lib}/bcprov.jar" />
   <!-- end of project properties -->
 
   <!-- JAR files to be included in classpath for compilation -->
   <property name="jars" value="${lib.cadcUtil}:${lib.cadcLog}:${lib.cadcRegistryClient}:${ext.log4j}:${ext.bouncy}" />
-  <property name="manifest.jars" value="${lib.cadcUtil} ${lib.cadcLog} ${lib.cadcRegistryClient} ${ext.log4j} ${ext.bouncy}" />
+  <property name="manifest.jars" value="${lib.cadcUtil} ${lib.cadcLog} ${lib.cadcRegistryClient} ${ext.log4j} ${ext.bouncy} ${ext.jdom2} ${ext.xerces}" />
   
 
     <target name="build" depends="compile,manifest">
