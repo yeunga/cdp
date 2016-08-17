@@ -1,7 +1,5 @@
 language: java
 jdk:
+  - openjdk7
   - oraclejdk8
-env:
-  - MODULE_DIR=cadcCDP
-  - MODULE_DIR=cadcCDP-Server
-script: cd $MODULE_DIR && gradle assemble && gradle check
+script: for mod in cadcCDP cadcCDP-Server; do cd $mod; gradle assemble check install; cd ..; done
