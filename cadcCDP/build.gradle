@@ -1,0 +1,27 @@
+plugins {
+    id "java"
+    id "maven"
+}
+
+repositories {
+    jcenter()
+    mavenLocal()
+
+    // Only here until cadcUtil is in jcenter.
+    maven {
+        url  "http://dl.bintray.com/opencadc/software"
+    }
+}
+
+version = '1.0'
+
+dependencies {
+    compile group: 'log4j', name: 'log4j', version: '1.2.+'
+    compile group: 'org.jdom', name: 'jdom2', version: '2.+'
+    compile group: 'xerces', name: 'xercesImpl', version: '2.+'
+    compile group: 'org.bouncycastle', name: 'bcprov-jdk16', version:'1.+'
+
+    compile 'opencadc:cadcUtil:1.+'
+    compile 'opencadc:cadcLog:1.+'
+    compile 'opencadc:cadcRegistry:1.+'
+}
