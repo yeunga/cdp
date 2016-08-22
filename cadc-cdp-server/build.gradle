@@ -1,6 +1,8 @@
 plugins {
-    id "java"
-    id "maven"
+    id 'java'
+    id 'maven'
+    id 'maven-publish'
+    id 'com.jfrog.bintray' version '1.7.1'
 }
 
 repositories {
@@ -14,7 +16,8 @@ repositories {
 }
 
 sourceCompatibility = 1.7
-group = 'opencadc'
+
+group = 'org.opencadc'
 
 version = '1.0'
 
@@ -24,10 +27,10 @@ dependencies {
     compile 'javax.servlet:javax.servlet-api:3.+'
     compile 'org.springframework:spring-jdbc:4.+'
 
-    compile 'opencadc:cadcLog:1.+'
-    compile 'opencadc:cadcUtil:1.+'
-    compile 'opencadc:cadcCDP:1.+'
-    compile 'opencadc:cadcVOSI:1.+'
+    compile 'org.opencadc:cadc-log:1.+'
+    compile 'org.opencadc:cadc-util:1.+'
+    compile 'org.opencadc:cadc-cdp:1.+'
+    compile 'org.opencadc:cadc-vosi:1.+'
 
     testCompile group: 'junit', name: 'junit', version: '4.+'
     testCompile group: 'org.easymock', name: 'easymock', version: '3.+'
