@@ -1,6 +1,8 @@
 plugins {
-    id "java"
-    id "maven"
+    id 'java'
+    id 'maven'
+    id 'maven-publish'
+    id 'com.jfrog.bintray' version '1.7.1'
 }
 
 repositories {
@@ -14,7 +16,8 @@ repositories {
 }
 
 sourceCompatibility = 1.7
-group = 'opencadc'
+
+group = 'org.opencadc'
 
 version = '1.0'
 
@@ -24,7 +27,7 @@ dependencies {
     compile 'xerces:xercesImpl:2.+'
     compile 'org.bouncycastle:bcprov-jdk15on:1.46'
 
-    compile 'opencadc:cadcUtil:1.+'
-    compile 'opencadc:cadcLog:1.+'
-    compile 'opencadc:cadcRegistry:1.+'
+    compile 'org.opencadc:cadc-util:1.+'
+    compile 'org.opencadc:cadc-log:1.+'
+    compile 'org.opencadc:cadc-registry:1.+'
 }
