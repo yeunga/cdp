@@ -59,6 +59,7 @@ public class CredPrivateClient
      * name ca.nrc.cadc.cred.client.priv.impl.CredPrivateClientImpl.
      * 
      * @param baseServiceURL
+     * @return 
      * @throws ClassNotFoundException
      *             implementation class
      *             ca.nrc.cadc.cred.client.priv.impl.CredPrivateClientImpl
@@ -67,13 +68,7 @@ public class CredPrivateClient
      *             constructor of class
      *             ca.nrc.cadc.cred.client.priv.impl.CredPrivateClientImpl
      *             not accessible
-     * @throws InstationatiationException
-     *             class
-     *             ca.nrc.cadc.cred.client.priv.impl.CredPrivateClientImpl
-     *             cannot be instantiated for some reason ( the class
-     *             object represents an abstract class, an interface, an
-     *             array class, a primitive type, or void or the class has
-     *             no nullary constructor).
+     * @throws java.lang.InstantiationException
      * 
      */
     public static CredPrivateClient getInstance(URL baseServiceURL)
