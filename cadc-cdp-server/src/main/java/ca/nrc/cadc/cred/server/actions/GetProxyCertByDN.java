@@ -105,7 +105,7 @@ public class GetProxyCertByDN extends DelegationAction
      * Private Key from DB.
      * @param p
      * @return 
-     * @throws ca.nrc.cadc.cred.server.ResourceNotFoundException 
+     * @throws ResourceNotFoundException 
      */
     @Override
     public X509CertificateChain getCertificate(X500Principal p)
