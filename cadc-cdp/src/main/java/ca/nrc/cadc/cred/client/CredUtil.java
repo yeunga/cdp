@@ -74,7 +74,6 @@ import ca.nrc.cadc.auth.AuthMethod;
 import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.SSLUtil;
 import ca.nrc.cadc.auth.X509CertificateChain;
-import ca.nrc.cadc.profiler.Profiler;
 import ca.nrc.cadc.reg.Standards;
 import ca.nrc.cadc.reg.client.LocalAuthority;
 import java.io.File;
@@ -84,6 +83,7 @@ import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
+import java.security.cert.CertificateNotYetValidException;
 import javax.security.auth.Subject;
 import org.apache.log4j.Logger;
 
@@ -122,9 +122,11 @@ public class CredUtil
      * 
      * @throws AccessControlException
      * @return true if subject has valid credentials, false if subject is anonymous
+     * @throws java.security.cert.CertificateExpiredException
+     * @throws java.security.cert.CertificateNotYetValidException
      */
     public static boolean checkCredentials()
-        throws AccessControlException
+        throws AccessControlException,  CertificateExpiredException, CertificateNotYetValidException
     {
         return checkCredentials(AuthenticationUtil.getCurrentSubject());
     }
@@ -140,9 +142,11 @@ public class CredUtil
      * 
      * @param subject
      * @return true if subject has valid credentials, false if subject is anonymous
+     * @throws java.security.cert.CertificateExpiredException
+     * @throws java.security.cert.CertificateNotYetValidException
      */
     public static boolean checkCredentials(final Subject subject)
-        throws AccessControlException
+        throws AccessControlException, CertificateExpiredException, CertificateNotYetValidException
     {
         AuthMethod am = AuthenticationUtil.getAuthMethod(subject);
         if (am == null || AuthMethod.ANON.equals(am))
@@ -196,11 +200,7 @@ public class CredUtil
                 subject.getPublicCredentials().add(privateKeyChain);
             }
         }
-        catch (CertificateException e)
-        {
-            throw new AccessControlException("credential service returned an invalid certificate");
-        }
-        
+        finally { }
         return true;
     }
 }
