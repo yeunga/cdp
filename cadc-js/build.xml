@@ -1,0 +1,107 @@
+<project name="cadcJS" default="build" basedir=".">
+
+  <property name="project" value="cadcJS"/>
+
+  <property environment="env"/>
+  <property file="local.build.properties" />
+
+  <!-- site-specific build properties or overrides of values in opencadc.properties -->
+  <property file="${env.CADC_PREFIX}/etc/local.properties" />
+
+  <!-- site-specific targets, e.g. install, cannot duplicate those in opencadc.targets.xml -->
+  <import file="${env.CADC_PREFIX}/etc/local.targets.xml" optional="true" />
+
+  <!-- default properties and targets -->
+  <property file="${env.CADC_PREFIX}/etc/opencadc.properties" />
+  <import file="${env.CADC_PREFIX}/etc/opencadc.targets.xml"/>
+
+
+  <target name="install" depends="install_www" />
+
+  <target name="install_www" depends="build, test">
+
+    <!-- Replace the last modified date with appropriate values. -->
+    <exec executable="setModificationDate.sh">
+      <arg value="build/www"/>
+    </exec>
+
+    <chmod perm="644">
+      <fileset dir="build/www"/>
+      <!-- files -->
+    </chmod>
+    <chmod perm="755">
+      <!--<dirset dir="${build}/www"/>-->
+      <fileset dir="build/www" includes="**/*.html" />
+      <!-- directories -->
+    </chmod>
+
+    <echo message="Copying using '${copy_cmd} ${copy_args} ${build}/www/ ${www}/"/>
+    <exec executable="${copy_cmd}">
+      <arg value="${copy_args}"/>
+      <arg value="build/www/"/>
+      <arg value="${www}/"/>
+    </exec>
+  </target>
+
+  <!-- project-specific targets -->
+  <target name="build" depends="resourceCopy"/>
+
+  <target name="resourceCopy">
+    <copy todir="build/www">
+      <fileset dir="src/www"/>
+    </copy>
+  </target>
+
+
+  <!-- ************* -->
+  <!-- Test targets -->
+
+  <target name="test" depends="js-test-all" />
+
+  <target name="js-test-all" depends="build">
+
+    <!-- QUnit Javascript Unit Tests -->
+    <echo message="Executing QUnit Javascript Unit Tests..."/>
+
+    <antcall target="js-test">
+      <param name="js-test-dir" value="util" />
+    </antcall>
+
+    <antcall target="js-test">
+      <param name="js-test-dir" value="uri" />
+    </antcall>
+  </target>
+
+  <!--  Test directory to test client-side javascript. -->
+  <property name="js.test.dir" value="test/src/www/javascript" />
+  <property name="runner" value="${user.dir}/test/qunitjs-runner.js" />
+  <property name="phantomjs" value="phantomjs" />
+
+  <target name="js-test">
+    <property name="test-execution-dir"
+              value="build/test/www/cadcJS/javascript/${js-test-dir}"/>
+    <property name="test-source-dir"
+              value="test/src/www/javascript/${js-test-dir}"/>
+
+    <echo message="Testing in ${test-execution-dir}"/>
+    <delete dir="${test-execution-dir}"/>
+
+    <!-- Initiate a copy to replace variables. -->
+    <copy todir="${test-execution-dir}" overwrite="true">
+      <fileset dir="${test-source-dir}">
+        <include name="**/*"/>
+      </fileset>
+      <filterset>
+        <filter token="test.root" value="${user.dir}/test"/>
+        <filter token="build.root" value="${user.dir}/build"/>
+      </filterset>
+    </copy>
+
+    <exec executable="${phantomjs}" failonerror="true">
+      <arg value="${runner}"/>
+      <arg value="file:///${user.dir}/${test-execution-dir}/index.html"/>
+      <arg value="10000"/>
+    </exec>
+  </target>
+
+</project>
